@@ -32,8 +32,11 @@
         
         /* Game UI */
         #timer { font-size: 4rem; text-align: center; color: var(--gold); font-family: monospace; font-weight: bold; margin: 15px 0; }
-        .target-frame { border: 4px solid var(--gold); padding: 15px; text-align: center; background: #000; }
-        .target-img { width: 100%; height: 280px; object-fit: cover; border: 1px solid #333; }
+        .target-frame { border: 4px solid var(--gold); padding: 15px; text-align: center; background: #000; border-radius: 12px; }
+        
+        /* SUMAŽINTA NUOTRAUKA */
+        .target-img { width: 160px; height: 160px; object-fit: cover; border: 2px solid #333; border-radius: 12px; margin: 0 auto; display: block; }
+        
         input[type="number"], input[type="tel"] { font-size: 2.5rem; width: 120px; text-align: center; background: #111; color: #0f0; border: 2px solid #0f0; border-radius: 8px; margin: 15px 0; transition: 0.3s; }
         input:disabled { background: #333; border-color: #555; color: #555; }
         
@@ -226,7 +229,6 @@
         db.ref('gameStatus').set({ started: true, startTime: Date.now() });
     }
 
-    // NAUJA: Raundo perkrovimas su tais pačiais žaidėjais
     window.newRound = function() {
         if (!confirm("Ar tikrai norite pradėti NAUJĄ RAUNDĄ? Visiems žaidėjams bus sukurti nauji ID ir Kodai, o laikas prasidės iš naujo.")) return;
         
@@ -236,14 +238,13 @@
             p.isAlive = true;
         });
         
-        // Sumaišome iš naujo, kad keistųsi taikiniai
         for (let i = players.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [players[i], players[j]] = [players[j], players[i]];
         }
 
         db.ref('players').set(players);
-        db.ref('gameStatus').update({ startTime: Date.now() }); // Atnaujiname laikmatį
+        db.ref('gameStatus').update({ startTime: Date.now() }); 
     }
 
     window.resetGame = function() {
@@ -398,7 +399,6 @@
         }
     }
 
-    // NAUJA: GM funkcijos pavienių žaidėjų valdymui
     window.gmSwapTeam = function(index) {
         if (!players[index]) return;
         players[index].team = players[index].team === 'RAUDONA' ? 'MELYNA' : 'RAUDONA';
@@ -410,7 +410,7 @@
         players.splice(index, 1);
         
         if (players.length === 0) {
-            db.ref('players').remove(); // Jei neliko nei vieno žaidėjo, išvalome bazę
+            db.ref('players').remove(); 
         } else {
             db.ref('players').set(players);
         }
