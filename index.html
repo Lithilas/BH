@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lithilas Bounty Hunter zaidimas</title>
+    <title>Airsoft Control Center</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <style>
@@ -25,8 +25,7 @@
         .player-card img { width: 60px; height: 60px; border-radius: 4px; object-fit: cover; background: #000; }
         
         /* Buttons */
-        .action-btn { background: var(--gold); color: black; padding: 18px; border: none; font-weight: bold; width: 100%; cursor: pointer; border-radius: 8px; font-size: 1.1rem; margin-top: 10px; transition: 0.3s; }
-        .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .action-btn { background: var(--gold); color: black; padding: 18px; border: none; font-weight: bold; width: 100%; cursor: pointer; border-radius: 8px; font-size: 1.1rem; margin-top: 10px; }
         .team-btn { padding: 12px; border: none; color: white; opacity: 0.2; cursor: pointer; font-weight: bold; flex: 1; border-radius: 4px; }
         .team-btn.active { opacity: 1; outline: 2px solid white; transform: scale(1.05); }
         
@@ -34,8 +33,7 @@
         #timer { font-size: 4rem; text-align: center; color: var(--gold); font-family: monospace; font-weight: bold; margin: 15px 0; }
         .target-frame { border: 4px solid var(--gold); padding: 15px; text-align: center; background: #000; }
         .target-img { width: 100%; height: 280px; object-fit: cover; border: 1px solid #333; }
-        input[type="number"] { font-size: 2.5rem; width: 120px; text-align: center; background: #111; color: #0f0; border: 2px solid #0f0; border-radius: 8px; margin: 15px 0; transition: 0.3s; }
-        input[type="number"]:disabled { background: #333; border-color: #555; color: #555; }
+        input[type="number"] { font-size: 2.5rem; width: 120px; text-align: center; background: #111; color: #0f0; border: 2px solid #0f0; border-radius: 8px; margin: 15px 0; }
         
         /* GM Dashboard */
         .gm-status { font-size: 0.85rem; color: #aaa; margin-top: 5px; }
@@ -44,27 +42,27 @@
 <body>
 <div class="container">
     <div id="screen-enlist">
-        <h2 style="color:var(--gold)">PRIDĖTI ŽAIDĖJUS</h2>
-        <input type="text" id="nameInput" placeholder="ĮRAŠYTI NICK'Ą" style="width: 100%; padding: 15px; box-sizing: border-box; background: #222; color: white; border: 1px solid #444; border-radius: 8px; font-size: 1.1rem;">
+        <h2 style="color:var(--gold)">1. ENLIST PLAYERS</h2>
+        <input type="text" id="nameInput" placeholder="TYPE NAME FIRST..." style="width: 100%; padding: 15px; box-sizing: border-box; background: #222; color: white; border: 1px solid #444; border-radius: 8px; font-size: 1.1rem;">
         
         <div id="drop-zone">
-            <b style="font-size: 1.2rem;">Įtempti foto</b><br>
-            <small>ARBA PASIRINKTI NAUJĄ FOTO</small>
+            <b style="font-size: 1.2rem;">DRAG PHOTO HERE</b><br>
+            <small>OR CLICK TO SELECT</small>
         </div>
         <input type="file" id="fileInput" class="hidden" accept="image/*">
         
         <div id="playerList"></div>
-        <button class="action-btn" onclick="navToAssign()">PRISKIRTI KOMANDAI</button>
+        <button class="action-btn" onclick="navToAssign()">NEXT: ASSIGN TEAMS</button>
     </div>
 
     <div id="screen-assign" class="hidden">
-        <h2>PRISKIRTI KOMANDAI</h2>
+        <h2>2. ASSIGN TEAMS</h2>
         <div id="assignList"></div>
-        <button class="action-btn" style="background:var(--green)" onclick="startFullGame()">PRADĖTI ŽAIDIMĄ</button>
+        <button class="action-btn" style="background:var(--green)" onclick="startFullGame()">START GAME (SYNC ALL)</button>
     </div>
 
     <div id="screen-wait" class="hidden">
-        <h2 style="text-align: center; margin-top: 100px;">LAUKIAME STARTO</h2>
+        <h2 style="text-align: center; margin-top: 100px;">WAITING FOR GM TO START...</h2>
     </div>
 
     <div id="screen-game" class="hidden">
@@ -75,18 +73,19 @@
             <h1 id="targetName" style="margin:10px 0;">--</h1>
             <h2 style="color:var(--gold); margin:0;">ID: <span id="targetID">--</span></h2>
             <input type="number" id="keyInput" placeholder="--">
-            <button id="killBtn" onclick="checkKill()" class="action-btn" style="background:#a00; color:white;">PATVIRTINTI NUŽUDYMĄ</button>
+            <button onclick="checkKill()" class="action-btn" style="background:#a00; color:white;">CONFIRM KILL</button>
         </div>
 
         <div id="gm-dashboard" class="hidden">
-            <h2 style="color:var(--gold)">GYVŲ ŽAIDĖJŲ SĄRAŠAS</h2>
+            <h2 style="color:var(--gold)">LIVE PLAYERS STATUS</h2>
             <div id="gm-player-list"></div>
-            <button class="action-btn" style="background:var(--red); color:white; margin-top:30px;" onclick="resetGame()">PRADĖTI NAUJĄ ŽAIDIMĄ</button>
+            <button class="action-btn" style="background:var(--red); color:white; margin-top:30px;" onclick="resetGame()">RESET GAME (START OVER)</button>
         </div>
     </div>
 </div>
 
 <script>
+    // --- 1. CONFIG ---
     const firebaseConfig = {
         apiKey: "AIzaSyB1aSPG4BKYghWw2KKq_Ri4oqRbDeh4t_8",
         authDomain: "lithilas-bh.firebaseapp.com",
@@ -104,6 +103,7 @@
     let myRole = new URLSearchParams(window.location.search).get('role') || 'GM';
     let timerInterval;
 
+    // Pradinis puslapio užkrovimas
     window.onload = () => {
         if (myRole !== 'GM') {
             document.getElementById('screen-enlist').classList.add('hidden');
@@ -130,7 +130,7 @@
 
     function processFile(file) {
         const nameVal = document.getElementById('nameInput').value.trim();
-        if (!nameVal) return alert("Prašome pirma įvesti vardą!");
+        if (!nameVal) return alert("Please enter a name first!");
 
         const reader = new FileReader();
         reader.readAsDataURL(file);
@@ -171,7 +171,7 @@
 
     // --- 3. TEAM ASSIGNMENT ---
     function navToAssign() {
-        if (players.length === 0) return alert("Pirma pridėkite žaidėjų!");
+        if (players.length === 0) return alert("Add players first.");
         document.getElementById('screen-enlist').classList.add('hidden');
         document.getElementById('screen-assign').classList.remove('hidden');
         renderAssign();
@@ -196,35 +196,34 @@
 
     // --- 4. GAME SYNC ---
     function startFullGame() {
-        if (players.some(p => !p.team)) return alert("Priskirkite visus žaidėjus komandoms!");
-        
-        // Sumaišome žaidėjų masyvą atsitiktine tvarka (Fisher-Yates)
-        for (let i = players.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [players[i], players[j]] = [players[j], players[i]];
-        }
-
+        if (players.some(p => !p.team)) return alert("Assign all players to teams!");
         db.ref('players').set(players);
         db.ref('gameStatus').set({ started: true, startTime: Date.now() });
     }
 
+    // Nauja: žaidimo perkrovimo funkcija
     window.resetGame = function() {
         if (!confirm("Ar tikrai norite IŠTRINTI visus duomenis ir perkrauti žaidimą?")) return;
         
+        // Išvalome duomenų bazę
         db.ref('players').remove();
         db.ref('gameStatus').set({ started: false });
         
+        // Išvalome vietinius sąrašus
         players = [];
         document.getElementById('playerList').innerHTML = '';
         document.getElementById('assignList').innerHTML = '';
     }
 
+    // Atnaujintas būsenos klausymasis
     db.ref('gameStatus').on('value', snap => {
         const status = snap.val();
         
+        // Paslepiame viską prieš nusprendžiant, ką rodyti
         document.querySelectorAll('.container > div').forEach(d => d.classList.add('hidden'));
 
         if (status && status.started) {
+            // ŽAIDIMAS VYKSTA
             document.getElementById('screen-game').classList.remove('hidden');
             
             if (myRole === 'GM') {
@@ -236,6 +235,7 @@
             }
             startTimer(status.startTime);
         } else {
+            // ŽAIDIMAS NEPRASIDĖJĘS / PERKRAUTAS
             clearInterval(timerInterval);
             if (myRole === 'GM') {
                 document.getElementById('screen-enlist').classList.remove('hidden');
@@ -249,7 +249,7 @@
         if (snap.exists()) {
             players = Object.values(snap.val());
         } else {
-            players = []; 
+            players = []; // Išvalome vietinį masyvą, jei bazė ištrinta
         }
         
         if (myRole !== 'GM') {
@@ -273,22 +273,24 @@
     }
 
     function updateTarget() {
+        // Jei žaidėjų sąrašas tuščias, nedarome nieko (išvengiame klaidų)
         if (players.length === 0) return;
 
         const target = players.find(p => p.team !== myRole && p.isAlive);
         if (!target) {
-            document.getElementById('hunt-ui').innerHTML = "<h1 style='color:var(--green); text-align:center;'>MISIJA ĮVYKDYTA</h1>";
+            document.getElementById('hunt-ui').innerHTML = "<h1 style='color:var(--green); text-align:center;'>MISSION COMPLETE</h1>";
             window.activeKey = null;
             return;
         }
         
+        // Atstatome taikinio UI, jei prieš tai buvo įjungtas "Mission Complete"
         if (!document.getElementById('targetImg')) {
             document.getElementById('hunt-ui').innerHTML = `
                 <img id="targetImg" class="target-img" src="${target.photo}">
                 <h1 id="targetName" style="margin:10px 0;">${target.name}</h1>
                 <h2 style="color:var(--gold); margin:0;">ID: <span id="targetID">${target.id}</span></h2>
                 <input type="number" id="keyInput" placeholder="--">
-                <button id="killBtn" onclick="checkKill()" class="action-btn" style="background:#a00; color:white;">PATVIRTINTI NUŽUDYMĄ</button>
+                <button onclick="checkKill()" class="action-btn" style="background:#a00; color:white;">CONFIRM KILL</button>
             `;
         } else {
             document.getElementById('targetImg').src = target.photo;
@@ -300,14 +302,10 @@
         if(document.getElementById('keyInput')) document.getElementById('keyInput').value = ''; 
     }
 
-    // Apsauga nuo spėliojimo (15s užraktas)
     window.checkKill = function() {
-        if (!window.activeKey) return alert("TAIKINYS NERASTAS!");
+        if (!window.activeKey) return alert("NO TARGET FOUND!");
         
-        const inputField = document.getElementById('keyInput');
-        const killBtn = document.getElementById('killBtn');
-        const input = inputField.value;
-
+        const input = document.getElementById('keyInput').value;
         if (input == window.activeKey) {
             const target = players.find(p => p.team !== myRole && p.isAlive);
             if(!target) return;
@@ -319,28 +317,9 @@
                     }
                 });
             });
-            alert("NUŽUDYMAS PATVIRTINTAS!");
+            alert("KILL CONFIRMED!");
         } else {
-            inputField.disabled = true;
-            killBtn.disabled = true;
-            inputField.value = '';
-            
-            let timeLeft = 15;
-            killBtn.style.background = "#555";
-            killBtn.innerText = `BLOKUOTA (${timeLeft}s)`;
-
-            const penaltyTimer = setInterval(() => {
-                timeLeft--;
-                if (timeLeft <= 0) {
-                    clearInterval(penaltyTimer);
-                    inputField.disabled = false;
-                    killBtn.disabled = false;
-                    killBtn.style.background = "#a00";
-                    killBtn.innerText = "PATVIRTINTI NUŽUDYMĄ";
-                } else {
-                    killBtn.innerText = `BLOKUOTA (${timeLeft}s)`;
-                }
-            }, 1000);
+            alert("INVALID KEY!");
         }
     }
 
@@ -352,8 +331,8 @@
                 <div style="flex:1">
                     <b style="text-decoration: ${p.isAlive ? 'none' : 'line-through'}">${p.name}</b>
                     <div class="gm-status">
-                        ${p.isAlive ? '<span style="color:var(--green)">GYVAS</span>' : '<span style="color:var(--red)">NUKAUTAS</span>'} | 
-                        ID: <b>${p.id}</b> | KODAS: <b>${p.key}</b>
+                        ${p.isAlive ? '<span style="color:var(--green)">ALIVE</span>' : '<span style="color:var(--red)">DEAD</span>'} | 
+                        ID: <b>${p.id}</b> | KEY: <b>${p.key}</b>
                     </div>
                 </div>
             </div>
