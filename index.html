@@ -86,16 +86,18 @@
 <script>
     // --- 1. CONFIG ---
     // ĮRAŠYK SAVO FIREBASE DUOMENIS ČIA:
-const firebaseConfig = {
-  apiKey: "AIzaSyB1aSPG4BKYghWw2KKq_Ri4oqRbDeh4t_8",
-  authDomain: "lithilas-bh.firebaseapp.com",
-  projectId: "lithilas-bh",
-  storageBucket: "lithilas-bh.firebasestorage.app",
-  messagingSenderId: "971183564853",
-  appId: "1:971183564853:web:2772ee6826ba1fa54d297c",
-  measurementId: "G-Y6FSWJD169"
-};
+// 1. Tavo unikalūs prisijungimo duomenys
+    const firebaseConfig = {
+        apiKey: "AIzaSy...",
+        authDomain: "tavo-projektas.firebaseapp.com",
+        databaseURL: "https://tavo-projektas-default-rtdb.europe-west1.firebasedatabase.app",
+        projectId: "tavo-projektas",
+        storageBucket: "tavo-projektas.appspot.com",
+        messagingSenderId: "123456789",
+        appId: "1:123456789:web:abcdef..."
+    };
 
+    // 2. Mūsų naudojama "Compat" inicializacija (Palik ją tokią, kokia yra)
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
     let players = []; 
