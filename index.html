@@ -3,75 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Airsoft Control Center</title>
+    <title>Airsoft Tracker</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <style>
-        :root { --red: #ff4d4d; --blue: #4d94ff; --dark: #0a0a0a; --gold: #ffd700; --green: #28a745; }
+        :root { --red: #ff4d4d; --blue: #4d94ff; --dark: #0a0a0a; --gold: #ffd700; }
         body { font-family: sans-serif; background: var(--dark); color: white; margin: 0; padding: 15px; }
         .container { max-width: 500px; margin: auto; }
         .hidden { display: none !important; }
         
-        /* Elements */
-        #drop-zone { border: 3px dashed #444; padding: 30px; text-align: center; border-radius: 10px; background: #151515; cursor: pointer; }
-        .player-card { background: #1a1a1a; margin: 10px 0; padding: 12px; border-radius: 8px; display: flex; align-items: center; gap: 12px; border-left: 6px solid #444; }
-        .player-card img { width: 60px; height: 60px; border-radius: 4px; object-fit: cover; background: #000; }
+        /* UI */
+        #drop-zone { border: 3px dashed #444; padding: 25px; text-align: center; background: #151515; border-radius: 10px; cursor: pointer; }
+        .player-card { background: #1a1a1a; margin: 10px 0; padding: 10px; border-radius: 8px; display: flex; align-items: center; gap: 10px; border-left: 5px solid #444; }
+        .player-card img { width: 50px; height: 50px; border-radius: 4px; object-fit: cover; background: #000; }
         
         /* Buttons */
-        .action-btn { background: var(--gold); color: black; padding: 18px; border: none; font-weight: bold; width: 100%; cursor: pointer; margin-top: 10px; border-radius: 8px; font-size: 1.1rem; }
-        .team-btn { padding: 12px; border: none; color: white; opacity: 0.25; cursor: pointer; font-weight: bold; border-radius: 4px; flex: 1; }
+        .action-btn { background: var(--gold); color: black; padding: 15px; border: none; font-weight: bold; width: 100%; cursor: pointer; border-radius: 8px; font-size: 1rem; margin-top: 10px; }
+        .team-btn { padding: 10px; border: none; color: white; opacity: 0.2; cursor: pointer; font-weight: bold; flex: 1; border-radius: 4px; }
         .team-btn.active { opacity: 1; outline: 2px solid white; }
         
         /* Game UI */
-        #timer { font-size: 4rem; text-align: center; color: var(--gold); font-family: monospace; font-weight: bold; margin: 15px 0; }
-        .target-frame { border: 4px solid var(--gold); padding: 15px; text-align: center; background: #000; }
-        .target-img-large { width: 100%; height: 280px; object-fit: cover; }
-        .key-input { font-size: 2.5rem; width: 110px; text-align: center; background: #111; color: #0f0; border: 2px solid #0f0; margin: 15px 0; }
+        #timer { font-size: 3.5rem; text-align: center; color: var(--gold); font-family: monospace; }
+        .target-frame { border: 3px solid var(--gold); padding: 15px; text-align: center; background: #000; }
+        .target-img { width: 100%; height: 250px; object-fit: cover; }
+        .key-input { font-size: 2rem; width: 100px; text-align: center; background: #111; color: #0f0; border: 1px solid #0f0; margin: 10px; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <div id="screen-enlist">
-        <h2 style="color:var(--gold)">1. ENLIST</h2>
-        <input type="text" id="nameInput" placeholder="PLAYER NAME..." style="width: 100%; padding: 15px; box-sizing: border-box; background: #222; color: white; border: 1px solid #444; border-radius: 8px;">
-        <div id="drop-zone" onclick="document.getElementById('fileInput').click()">
-            <strong>CLICK OR DROP PHOTO</strong>
-        </div>
+        <h2>1. ENLIST</h2>
+        <input type="text" id="nameInput" placeholder="PLAYER NAME..." style="width:100%; padding:15px; box-sizing:border-box; background:#222; color:white; border:1px solid #444;">
+        <div id="drop-zone" onclick="document.getElementById('fileInput').click()">CLICK TO UPLOAD PHOTO</div>
         <input type="file" id="fileInput" class="hidden" accept="image/*">
-        
         <div id="playerList"></div>
-        <button class="action-btn" onclick="nav('screen-assign'); renderAssign();">NEXT: ASSIGN TEAMS</button>
+        <button class="action-btn" onclick="showAssign()">NEXT: ASSIGN TEAMS</button>
     </div>
 
     <div id="screen-assign" class="hidden">
-        <h2>2. ASSIGN TEAMS</h2>
+        <h2>2. ASSIGN</h2>
         <div id="assignList"></div>
-        <button class="action-btn" style="background:var(--green)" onclick="showReview()">FINAL REVIEW</button>
+        <button class="action-btn" onclick="pushFinal()">START GAME</button>
     </div>
 
-    <div id="screen-review" class="hidden">
-        <h2>3. REVIEW</h2>
-        <div id="reviewTableArea"></div>
-        <button class="action-btn" style="background:var(--green)" onclick="pushToFirebase()">START GAME</button>
-    </div>
-
-    <div id="screen-wait" class="hidden"><h2 style="text-align: center; margin-top: 100px;">WAITING FOR GM...</h2></div>
     <div id="screen-game" class="hidden">
         <div id="timer">60:00</div>
         <div id="hunt-ui" class="target-frame">
-            <img id="targetImg" class="target-img-large">
+            <img id="targetImg" class="target-img">
             <h1 id="targetName">--</h1>
-            <h2 style="color:var(--gold)">ID: <span id="targetID">--</span></h2>
-            <input type="number" id="keyInput" class="key-input" placeholder="--">
-            <button onclick="submitKill()" class="action-btn" style="background:#a00; color:white;">KILL CONFIRMED</button>
+            <input type="number" id="keyInput" class="key-input">
+            <button onclick="submitKill()" class="action-btn" style="background:red; color:white;">KILL CONFIRMED</button>
         </div>
     </div>
 </div>
 
 <script>
-    // --- FIREBASE CONFIG ---
-   const firebaseConfig = {
+    // --- FIREBASE CONFIG (ADD YOURS) ---
+    const firebaseConfig = {
   apiKey: "AIzaSyB1aSPG4BKYghWw2KKq_Ri4oqRbDeh4t_8",
   authDomain: "lithilas-bh.firebaseapp.com",
   projectId: "lithilas-bh",
@@ -83,42 +72,32 @@
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
-    let localPlayers = [];
+    let players = [];
     let myRole = new URLSearchParams(window.location.search).get('role') || 'GM';
 
-    function nav(id) {
-        document.querySelectorAll('.container > div').forEach(d => d.classList.add('hidden'));
-        document.getElementById(id).classList.remove('hidden');
-    }
-    if (myRole !== 'GM') nav('screen-wait');
-
-    // --- IMAGE COMPRESSION LOGIC (The Fix) ---
-    document.getElementById('fileInput').onchange = (e) => {
-        const name = document.getElementById('nameInput').value.trim();
-        if (!name) return alert("Type name first!");
+    // 1. FILE & COMPRESSION
+    document.getElementById('fileInput').onchange = function(e) {
+        const name = document.getElementById('nameInput').value;
+        if(!name) return alert("Enter name first");
         
-        const file = e.target.files[0];
         const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = (event) => {
+        reader.readAsDataURL(e.target.files[0]);
+        reader.onload = function(event) {
             const img = new Image();
             img.src = event.target.result;
-            img.onload = () => {
+            img.onload = function() {
                 const canvas = document.createElement('canvas');
-                const MAX_WIDTH = 600;
-                const scale = MAX_WIDTH / img.width;
-                canvas.width = MAX_WIDTH;
-                canvas.height = img.height * scale;
                 const ctx = canvas.getContext('2d');
+                canvas.width = 400; // Small width
+                canvas.height = img.height * (400 / img.width);
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 
-                // Final smaller string
-                const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
-                
-                localPlayers.push({
-                    name, photo: compressedBase64,
-                    id: Math.floor(Math.random() * 90 + 10),
-                    key: Math.floor(Math.random() * 90 + 10),
+                const compressed = canvas.toDataURL('image/jpeg', 0.5); // 50% Quality
+                players.push({
+                    name: name,
+                    photo: compressed,
+                    id: Math.floor(Math.random()*90+10),
+                    key: Math.floor(Math.random()*90+10),
                     team: '', isAlive: true
                 });
                 document.getElementById('nameInput').value = '';
@@ -128,74 +107,79 @@
     };
 
     function renderEnlist() {
-        document.getElementById('playerList').innerHTML = localPlayers.map(p => `
-            <div class="player-card"><img src="${p.photo}"><b>${p.name}</b></div>
-        `).join('');
+        let html = '';
+        for(let p of players) {
+            html += `<div class="player-card"><img src="${p.photo}"><b>${p.name}</b></div>`;
+        }
+        document.getElementById('playerList').innerHTML = html;
     }
 
-    function renderAssign() {
-        document.getElementById('assignList').innerHTML = localPlayers.map((p, i) => `
-            <div class="player-card" style="border-left-color:${p.team==='RAUDONA'?'red':p.team==='MELYNA'?'blue':'#444'}">
-                <img src="${p.photo}"><b style="flex:1">${p.name}</b>
-                <button class="team-btn ${p.team==='RAUDONA'?'active':''}" style="background:var(--red)" onclick="setTeam(${i},'RAUDONA')">RED</button>
-                <button class="team-btn ${p.team==='MELYNA'?'active':''}" style="background:var(--blue)" onclick="setTeam(${i},'MELYNA')">BLUE</button>
-            </div>
-        `).join('');
-    }
-
-    function setTeam(idx, team) {
-        localPlayers[idx].team = team;
+    // 2. TEAM ASSIGNMENT (THE FIX)
+    function showAssign() {
+        document.getElementById('screen-enlist').classList.add('hidden');
+        document.getElementById('screen-assign').classList.remove('hidden');
         renderAssign();
     }
 
-    function showReview() {
-        nav('screen-review');
-        let html = '<table border="1" style="width:100%; border-collapse:collapse;">';
-        localPlayers.forEach(p => { html += `<tr><td>${p.name}</td><td>${p.team}</td><td>${p.id}</td></tr>`; });
-        document.getElementById('reviewTableArea').innerHTML = html + '</table>';
+    function renderAssign() {
+        let html = '';
+        players.forEach((p, i) => {
+            html += `
+            <div class="player-card" style="border-left-color:${p.team==='RED'?'red':p.team==='BLUE'?'blue':'#444'}">
+                <img src="${p.photo}"><b style="flex:1">${p.name}</b>
+                <button class="team-btn ${p.team==='RED'?'active':''}" style="background:red" onclick="setTeam(${i},'RED')">RED</button>
+                <button class="team-btn ${p.team==='BLUE'?'active':''}" style="background:blue" onclick="setTeam(${i},'BLUE')">BLUE</button>
+            </div>`;
+        });
+        document.getElementById('assignList').innerHTML = html;
     }
 
-    function pushToFirebase() {
-        db.ref('players').set(localPlayers);
+    window.setTeam = function(i, team) {
+        players[i].team = team;
+        renderAssign(); // Refresh UI instantly
+    };
+
+    // 3. PUSH & SYNC
+    function pushFinal() {
+        db.ref('players').set(players);
         db.ref('gameStatus').set({ started: true, startTime: Date.now() });
     }
 
-    // --- GLOBAL SYNC ---
     db.ref('gameStatus').on('value', snap => {
-        if (snap.val()?.started) {
-            nav('screen-game');
+        if(snap.val()?.started) {
+            document.querySelectorAll('.container > div').forEach(d => d.classList.add('hidden'));
+            document.getElementById('screen-game').classList.remove('hidden');
             setInterval(() => {
-                const rem = 3600 - Math.floor((Date.now() - snap.val().startTime) / 1000);
-                document.getElementById('timer').innerText = `${Math.floor(rem/60)}:${(rem%60).toString().padStart(2,'0')}`;
+                const rem = 3600 - Math.floor((Date.now() - snap.val().startTime)/1000);
+                document.getElementById('timer').innerText = Math.floor(rem/60) + ":" + (rem%60).toString().padStart(2,'0');
             }, 1000);
         }
     });
 
     db.ref('players').on('value', snap => {
-        if (snap.exists()) {
-            localPlayers = Object.values(snap.val());
-            if (myRole !== 'GM') updateTarget();
+        if(snap.exists()) {
+            players = Object.values(snap.val());
+            if(myRole !== 'GM') updateTarget();
         }
     });
 
     function updateTarget() {
-        const target = localPlayers.find(p => p.team !== myRole && p.isAlive);
-        if (!target) return document.getElementById('hunt-ui').innerHTML = "<h1>VICTORY</h1>";
+        const target = players.find(p => p.team !== myRole && p.isAlive);
+        if(!target) return document.getElementById('hunt-ui').innerHTML = "<h1>VICTORY</h1>";
         document.getElementById('targetImg').src = target.photo;
         document.getElementById('targetName').innerText = target.name;
-        document.getElementById('targetID').innerText = target.id;
         window.activeKey = target.key;
     }
 
-    function submitKill() {
-        if (document.getElementById('keyInput').value == window.activeKey) {
-            const target = localPlayers.find(p => p.team !== myRole && p.isAlive);
+    window.submitKill = function() {
+        if(document.getElementById('keyInput').value == window.activeKey) {
+            const target = players.find(p => p.team !== myRole && p.isAlive);
             db.ref('players').once('value', snap => {
                 snap.forEach(c => { if(c.val().name === target.name) c.ref.update({ isAlive: false }); });
             });
-            alert("CONFIRMED");
-        } else alert("WRONG KEY");
-    }
+            alert("DONE");
+        } else alert("WRONG");
+    };
 </script>
 </body>
 </html>
