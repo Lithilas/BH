@@ -79,6 +79,8 @@
     <div id="screen-game" class="hidden">
         <div id="timer">60:00</div>
         
+        <div id="player-score" style="margin-bottom: 15px;"></div>
+
         <div id="hunt-ui" class="target-frame">
             <img id="targetImg" class="target-img" src="">
             <h1 id="targetName" style="margin:10px 0;">--</h1>
@@ -240,10 +242,12 @@
             
             if (myRole === 'GM') {
                 document.getElementById('hunt-ui').classList.add('hidden');
+                document.getElementById('player-score').classList.add('hidden'); // GM šios juostos nereikia, nes jis turi savo
                 document.getElementById('gm-dashboard').classList.remove('hidden');
                 renderGMDashboard();
             } else {
                 document.getElementById('hunt-ui').classList.remove('hidden');
+                document.getElementById('player-score').classList.remove('hidden'); // Rodyti žaidėjams
             }
             startTimer(status.startTime);
         } else {
@@ -265,6 +269,7 @@
         
         if (myRole !== 'GM') {
             updateTarget();
+            renderPlayerScore(); // NAUJA: Atnaujiname rezultatą žaidėjams
         } else {
             renderGMDashboard();
         }
@@ -309,6 +314,21 @@
         
         window.activeKey = target.key;
         if(document.getElementById('keyInput')) document.getElementById('keyInput').value = ''; 
+    }
+
+    // NAUJA: Funkcija, kuri atvaizduoja rezultatą žaidėjams
+    function renderPlayerScore() {
+        if (myRole === 'GM') return; 
+
+        const aliveRed = players.filter(p => p.team === 'RAUDONA' && p.isAlive).length;
+        const aliveBlue = players.filter(p => p.team === 'MELYNA' && p.isAlive).length;
+
+        document.getElementById('player-score').innerHTML = `
+            <div style="display:flex; justify-content:space-between; background:#111; padding:12px; border-radius:8px; border:1px solid #333;">
+                <span style="color:var(--red); font-size:1.1rem; font-weight:bold;">RAUDONI: ${aliveRed}</span>
+                <span style="color:var(--blue); font-size:1.1rem; font-weight:bold;">MĖLYNI: ${aliveBlue}</span>
+            </div>
+        `;
     }
 
     window.checkKill = function() {
