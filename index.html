@@ -34,13 +34,8 @@
         #timer { font-size: 4rem; text-align: center; color: var(--gold); font-family: monospace; font-weight: bold; margin: 15px 0; }
         .target-frame { border: 4px solid var(--gold); padding: 15px; text-align: center; background: #000; }
         .target-img { width: 100%; height: 280px; object-fit: cover; border: 1px solid #333; }
-        input[type="number"] { font-size: 2.5rem; width: 120px; text-align: center; background: #111; color: #0f0; border: 2px solid #0f0; border-radius: 8px; margin: 15px 0; transition: 0.3s; }
-        input[type="number"]:disabled { background: #333; border-color: #555; color: #555; }
-        
-        /* Paslepiame skaičių laukelių rodyklytes (spinners) dėl geresnio vaizdo */
-        input[type=number]::-webkit-inner-spin-button, 
-        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        input[type=number] { -moz-appearance: textfield; }
+        input[type="number"], input[type="tel"] { font-size: 2.5rem; width: 120px; text-align: center; background: #111; color: #0f0; border: 2px solid #0f0; border-radius: 8px; margin: 15px 0; transition: 0.3s; }
+        input:disabled { background: #333; border-color: #555; color: #555; }
         
         /* GM Dashboard */
         .gm-status { font-size: 0.85rem; color: #aaa; margin-top: 5px; }
@@ -48,4 +43,325 @@
 </head>
 <body>
 <div class="container">
-    <div
+    <div id="screen-enlist">
+        <h2 style="color:var(--gold)">PRIDĖTI ŽAIDĖJUS</h2>
+        <input type="text" id="nameInput" placeholder="ĮRAŠYTI NICK'Ą" style="width: 100%; padding: 15px; box-sizing: border-box; background: #222; color: white; border: 1px solid #444; border-radius: 8px; font-size: 1.1rem;">
+        
+        <div id="drop-zone">
+            <b style="font-size: 1.2rem;">Įtempti foto</b><br>
+            <small>ARBA PASIRINKTI NAUJĄ FOTO</small>
+        </div>
+        <input type="file" id="fileInput" class="hidden" accept="image/*">
+        
+        <div id="playerList"></div>
+        <button class="action-btn" onclick="navToAssign()">PRISKIRTI KOMANDAI</button>
+    </div>
+
+    <div id="screen-assign" class="hidden">
+        <h2>PRISKIRTI KOMANDAI</h2>
+        <div id="assignList"></div>
+        <button class="action-btn" style="background:var(--green)" onclick="startFullGame()">PRADĖTI ŽAIDIMĄ</button>
+    </div>
+
+    <div id="screen-wait" class="hidden">
+        <h2 style="text-align: center; margin-top: 100px;">LAUKIAME STARTO</h2>
+    </div>
+
+    <div id="screen-game" class="hidden">
+        <div id="timer">60:00</div>
+        
+        <div id="hunt-ui" class="target-frame">
+            <img id="targetImg" class="target-img" src="">
+            <h1 id="targetName" style="margin:10px 0;">--</h1>
+            <h2 style="color:var(--gold); margin:0;">ID: <span id="targetID">--</span></h2>
+            <input type="tel" inputmode="numeric" pattern="[0-9]*" id="keyInput" placeholder="--">
+            <button id="killBtn" onclick="checkKill()" class="action-btn" style="background:#a00; color:white;">PATVIRTINTI NUŽUDYMĄ</button>
+        </div>
+
+        <div id="gm-dashboard" class="hidden">
+            <h2 style="color:var(--gold)">GYVŲ ŽAIDĖJŲ SĄRAŠAS</h2>
+            <div id="gm-player-list"></div>
+            <button class="action-btn" style="background:var(--red); color:white; margin-top:30px;" onclick="resetGame()">PRADĖTI NAUJĄ ŽAIDIMĄ</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyB1aSPG4BKYghWw2KKq_Ri4oqRbDeh4t_8",
+        authDomain: "lithilas-bh.firebaseapp.com",
+        databaseURL: "https://lithilas-bh-default-rtdb.europe-west1.firebasedatabase.app",
+        projectId: "lithilas-bh",
+        storageBucket: "lithilas-bh.firebasestorage.app",
+        messagingSenderId: "971183564853",
+        appId: "1:971183564853:web:2772ee6826ba1fa54d297c",
+        measurementId: "G-Y6FSWJD169"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    let players = []; 
+    let myRole = new URLSearchParams(window.location.search).get('role') || 'GM';
+    let timerInterval;
+
+    window.onload = () => {
+        if (myRole !== 'GM') {
+            document.getElementById('screen-enlist').classList.add('hidden');
+            document.getElementById('screen-wait').classList.remove('hidden');
+        }
+    };
+
+    // --- 2. DRAG & DROP + INSTANT RENDER ---
+    const dz = document.getElementById('drop-zone');
+    const fi = document.getElementById('fileInput');
+
+    if(dz) dz.onclick = () => fi.click();
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => {
+        if(dz) dz.addEventListener(e, (ev) => { ev.preventDefault(); ev.stopPropagation(); });
+    });
+    if(dz) dz.addEventListener('dragover', () => dz.classList.add('dragover'));
+    if(dz) dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+
+    if(dz) dz.addEventListener('drop', (e) => {
+        dz.classList.remove('dragover');
+        if (e.dataTransfer.files.length) processFile(e.dataTransfer.files[0]);
+    });
+    if(fi) fi.onchange = (e) => { if (e.target.files.length) processFile(e.target.files[0]); };
+
+    function processFile(file) {
+        const nameVal = document.getElementById('nameInput').value.trim();
+        
+        if (!nameVal) {
+            document.getElementById('fileInput').value = ''; 
+            return alert("Prašome pirma įvesti vardą!");
+        }
+
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_WIDTH = 500;
+                const scale = MAX_WIDTH / img.width;
+                canvas.width = MAX_WIDTH;
+                canvas.height = img.height * scale;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                
+                const compressedData = canvas.toDataURL('image/jpeg', 0.6);
+
+                players.push({
+                    name: nameVal,
+                    photo: compressedData,
+                    id: Math.floor(Math.random() * 90 + 10),
+                    key: Math.floor(Math.random() * 90 + 10),
+                    team: '', 
+                    isAlive: true
+                });
+                
+                document.getElementById('nameInput').value = '';
+                document.getElementById('fileInput').value = ''; 
+                renderEnlist();
+            };
+        };
+    }
+
+    function renderEnlist() {
+        document.getElementById('playerList').innerHTML = players.map(p => `
+            <div class="player-card"><img src="${p.photo}"><b>${p.name}</b></div>
+        `).join('');
+    }
+
+    // --- 3. TEAM ASSIGNMENT ---
+    function navToAssign() {
+        if (players.length === 0) return alert("Pirma pridėkite žaidėjų!");
+        document.getElementById('screen-enlist').classList.add('hidden');
+        document.getElementById('screen-assign').classList.remove('hidden');
+        renderAssign();
+    }
+
+    function renderAssign() {
+        document.getElementById('assignList').innerHTML = players.map((p, i) => `
+            <div class="player-card" style="border-left-color:${p.team==='RAUDONA'?'var(--red)':p.team==='MELYNA'?'var(--blue)':'#444'}">
+                <img src="${p.photo}"><b style="flex:1">${p.name}</b>
+                <div style="display:flex; gap:5px;">
+                    <button class="team-btn ${p.team==='RAUDONA'?'active':''}" style="background:var(--red)" onclick="setTeam(${i},'RAUDONA')">RED</button>
+                    <button class="team-btn ${p.team==='MELYNA'?'active':''}" style="background:var(--blue)" onclick="setTeam(${i},'MELYNA')">BLUE</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    window.setTeam = function(idx, teamName) {
+        players[idx].team = teamName;
+        renderAssign();
+    };
+
+    // --- 4. GAME SYNC ---
+    function startFullGame() {
+        if (players.some(p => !p.team)) return alert("Priskirkite visus žaidėjus komandoms!");
+        
+        for (let i = players.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [players[i], players[j]] = [players[j], players[i]];
+        }
+
+        db.ref('players').set(players);
+        db.ref('gameStatus').set({ started: true, startTime: Date.now() });
+    }
+
+    window.resetGame = function() {
+        if (!confirm("Ar tikrai norite IŠTRINTI visus duomenis ir perkrauti žaidimą?")) return;
+        
+        db.ref('players').remove();
+        db.ref('gameStatus').set({ started: false });
+        
+        players = [];
+        document.getElementById('playerList').innerHTML = '';
+        document.getElementById('assignList').innerHTML = '';
+    }
+
+    db.ref('gameStatus').on('value', snap => {
+        const status = snap.val();
+        
+        document.querySelectorAll('.container > div').forEach(d => d.classList.add('hidden'));
+
+        if (status && status.started) {
+            document.getElementById('screen-game').classList.remove('hidden');
+            
+            if (myRole === 'GM') {
+                document.getElementById('hunt-ui').classList.add('hidden');
+                document.getElementById('gm-dashboard').classList.remove('hidden');
+                renderGMDashboard();
+            } else {
+                document.getElementById('hunt-ui').classList.remove('hidden');
+            }
+            startTimer(status.startTime);
+        } else {
+            clearInterval(timerInterval);
+            if (myRole === 'GM') {
+                document.getElementById('screen-enlist').classList.remove('hidden');
+            } else {
+                document.getElementById('screen-wait').classList.remove('hidden');
+            }
+        }
+    });
+
+    db.ref('players').on('value', snap => {
+        if (snap.exists()) {
+            players = Object.values(snap.val());
+        } else {
+            players = []; 
+        }
+        
+        if (myRole !== 'GM') {
+            updateTarget();
+        } else {
+            renderGMDashboard();
+        }
+    });
+
+    function startTimer(startTime) {
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            const rem = 3600 - Math.floor((Date.now() - startTime) / 1000);
+            if (rem <= 0) {
+                clearInterval(timerInterval);
+                return document.getElementById('timer').innerText = "00:00";
+            }
+            const m = Math.floor(rem / 60), s = rem % 60;
+            document.getElementById('timer').innerText = `${m}:${s < 10 ? '0'+s : s}`;
+        }, 1000);
+    }
+
+    function updateTarget() {
+        if (players.length === 0) return;
+
+        const target = players.find(p => p.team !== myRole && p.isAlive);
+        if (!target) {
+            document.getElementById('hunt-ui').innerHTML = "<h1 style='color:var(--green); text-align:center;'>MISIJA ĮVYKDYTA</h1>";
+            window.activeKey = null;
+            return;
+        }
+        
+        if (!document.getElementById('targetImg')) {
+            document.getElementById('hunt-ui').innerHTML = `
+                <img id="targetImg" class="target-img" src="${target.photo}">
+                <h1 id="targetName" style="margin:10px 0;">${target.name}</h1>
+                <h2 style="color:var(--gold); margin:0;">ID: <span id="targetID">${target.id}</span></h2>
+                <input type="tel" inputmode="numeric" pattern="[0-9]*" id="keyInput" placeholder="--">
+                <button id="killBtn" onclick="checkKill()" class="action-btn" style="background:#a00; color:white;">PATVIRTINTI NUŽUDYMĄ</button>
+            `;
+        } else {
+            document.getElementById('targetImg').src = target.photo;
+            document.getElementById('targetName').innerText = target.name;
+            document.getElementById('targetID').innerText = target.id;
+        }
+        
+        window.activeKey = target.key;
+        if(document.getElementById('keyInput')) document.getElementById('keyInput').value = ''; 
+    }
+
+    window.checkKill = function() {
+        if (!window.activeKey) return alert("TAIKINYS NERASTAS!");
+        
+        const inputField = document.getElementById('keyInput');
+        const killBtn = document.getElementById('killBtn');
+        const input = inputField.value;
+
+        if (input == window.activeKey) {
+            const target = players.find(p => p.team !== myRole && p.isAlive);
+            if(!target) return;
+
+            db.ref('players').once('value', snap => {
+                snap.forEach(c => { 
+                    if(c.val().id === target.id) {
+                        c.ref.update({ isAlive: false }); 
+                    }
+                });
+            });
+            alert("NUŽUDYMAS PATVIRTINTAS!");
+        } else {
+            inputField.disabled = true;
+            killBtn.disabled = true;
+            inputField.value = '';
+            
+            let timeLeft = 15;
+            killBtn.style.background = "#555";
+            killBtn.innerText = `BLOKUOTA (${timeLeft}s)`;
+
+            const penaltyTimer = setInterval(() => {
+                timeLeft--;
+                if (timeLeft <= 0) {
+                    clearInterval(penaltyTimer);
+                    inputField.disabled = false;
+                    killBtn.disabled = false;
+                    killBtn.style.background = "#a00";
+                    killBtn.innerText = "PATVIRTINTI NUŽUDYMĄ";
+                } else {
+                    killBtn.innerText = `BLOKUOTA (${timeLeft}s)`;
+                }
+            }, 1000);
+        }
+    }
+
+    function renderGMDashboard() {
+        if (myRole !== 'GM') return;
+        document.getElementById('gm-player-list').innerHTML = players.map(p => `
+            <div class="player-card" style="opacity: ${p.isAlive ? 1 : 0.4}; border-left-color:${p.team==='RAUDONA'?'var(--red)':'var(--blue)'}">
+                <img src="${p.photo}" style="width:50px; height:50px;">
+                <div style="flex:1">
+                    <b style="text-decoration: ${p.isAlive ? 'none' : 'line-through'}">${p.name}</b>
+                    <div class="gm-status">
+                        ${p.isAlive ? '<span style="color:var(--green)">GYVAS</span>' : '<span style="color:var(--red)">NUKAUTAS</span>'} | 
+                        ID: <b>${p.id}</b> | KODAS: <b>${p.key}</b>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+</script>
+</body>
+</html>
