@@ -41,13 +41,16 @@
         #gm-player-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 15px; }
         .gm-card { 
             background: #1a1a1a; padding: 8px; border-radius: 6px; 
-            display: flex; align-items: center; gap: 8px; border-left: 4px solid #444;
+            display: flex; flex-direction: column; gap: 8px; border-left: 4px solid #444;
             font-size: 0.85rem; overflow: hidden;
         }
+        .gm-card-top { display: flex; align-items: center; gap: 8px; }
         .gm-card img { width: 40px; height: 40px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
-        .gm-card-info { display: flex; flex-direction: column; overflow: hidden; }
+        .gm-card-info { display: flex; flex-direction: column; overflow: hidden; flex: 1; }
         .gm-card-info b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.9rem; }
         .gm-status { font-size: 0.75rem; color: #aaa; margin-top: 2px; line-height: 1.3; }
+        .gm-actions { display: flex; gap: 5px; width: 100%; }
+        .gm-btn { flex: 1; border: none; padding: 6px; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -93,7 +96,9 @@
             <h2 style="color:var(--gold); text-align:center; margin-bottom:5px;">GYVŲ ŽAIDĖJŲ SĄRAŠAS</h2>
             <div id="gm-score"></div>
             <div id="gm-player-list"></div>
-            <button class="action-btn" style="background:var(--red); color:white; margin-top:30px;" onclick="resetGame()">PRADĖTI NAUJĄ ŽAIDIMĄ</button>
+            
+            <button class="action-btn" style="background:var(--blue); color:white; margin-top:30px;" onclick="newRound()">NAUJAS RAUNDAS (TIE PATYS ŽAIDĖJAI)</button>
+            <button class="action-btn" style="background:var(--red); color:white; margin-top:10px;" onclick="resetGame()">VISKĄ IŠTRINTI</button>
         </div>
     </div>
 </div>
@@ -221,8 +226,28 @@
         db.ref('gameStatus').set({ started: true, startTime: Date.now() });
     }
 
+    // NAUJA: Raundo perkrovimas su tais pačiais žaidėjais
+    window.newRound = function() {
+        if (!confirm("Ar tikrai norite pradėti NAUJĄ RAUNDĄ? Visiems žaidėjams bus sukurti nauji ID ir Kodai, o laikas prasidės iš naujo.")) return;
+        
+        players.forEach(p => {
+            p.id = Math.floor(Math.random() * 90 + 10);
+            p.key = Math.floor(Math.random() * 90 + 10);
+            p.isAlive = true;
+        });
+        
+        // Sumaišome iš naujo, kad keistųsi taikiniai
+        for (let i = players.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [players[i], players[j]] = [players[j], players[i]];
+        }
+
+        db.ref('players').set(players);
+        db.ref('gameStatus').update({ startTime: Date.now() }); // Atnaujiname laikmatį
+    }
+
     window.resetGame = function() {
-        if (!confirm("Ar tikrai norite IŠTRINTI visus duomenis ir perkrauti žaidimą?")) return;
+        if (!confirm("Ar tikrai norite IŠTRINTI visus duomenis? Žaidėjus teks suvedinėti iš naujo.")) return;
         
         db.ref('players').remove();
         db.ref('gameStatus').set({ started: false });
@@ -242,12 +267,12 @@
             
             if (myRole === 'GM') {
                 document.getElementById('hunt-ui').classList.add('hidden');
-                document.getElementById('player-score').classList.add('hidden'); // GM šios juostos nereikia, nes jis turi savo
+                document.getElementById('player-score').classList.add('hidden');
                 document.getElementById('gm-dashboard').classList.remove('hidden');
                 renderGMDashboard();
             } else {
                 document.getElementById('hunt-ui').classList.remove('hidden');
-                document.getElementById('player-score').classList.remove('hidden'); // Rodyti žaidėjams
+                document.getElementById('player-score').classList.remove('hidden');
             }
             startTimer(status.startTime);
         } else {
@@ -269,7 +294,7 @@
         
         if (myRole !== 'GM') {
             updateTarget();
-            renderPlayerScore(); // NAUJA: Atnaujiname rezultatą žaidėjams
+            renderPlayerScore();
         } else {
             renderGMDashboard();
         }
@@ -316,7 +341,6 @@
         if(document.getElementById('keyInput')) document.getElementById('keyInput').value = ''; 
     }
 
-    // NAUJA: Funkcija, kuri atvaizduoja rezultatą žaidėjams
     function renderPlayerScore() {
         if (myRole === 'GM') return; 
 
@@ -374,6 +398,24 @@
         }
     }
 
+    // NAUJA: GM funkcijos pavienių žaidėjų valdymui
+    window.gmSwapTeam = function(index) {
+        if (!players[index]) return;
+        players[index].team = players[index].team === 'RAUDONA' ? 'MELYNA' : 'RAUDONA';
+        db.ref('players').set(players);
+    }
+
+    window.gmDeletePlayer = function(index) {
+        if (!confirm(`Ar tikrai norite pašalinti žaidėją ${players[index].name}?`)) return;
+        players.splice(index, 1);
+        
+        if (players.length === 0) {
+            db.ref('players').remove(); // Jei neliko nei vieno žaidėjo, išvalome bazę
+        } else {
+            db.ref('players').set(players);
+        }
+    }
+
     function renderGMDashboard() {
         if (myRole !== 'GM') return;
         
@@ -387,15 +429,21 @@
             </div>
         `;
 
-        document.getElementById('gm-player-list').innerHTML = players.map(p => `
+        document.getElementById('gm-player-list').innerHTML = players.map((p, index) => `
             <div class="gm-card" style="opacity: ${p.isAlive ? 1 : 0.4}; border-left-color:${p.team==='RAUDONA'?'var(--red)':'var(--blue)'}">
-                <img src="${p.photo}">
-                <div class="gm-card-info">
-                    <b style="text-decoration: ${p.isAlive ? 'none' : 'line-through'}">${p.name}</b>
-                    <div class="gm-status">
-                        ${p.isAlive ? '<span style="color:var(--green)">GYVAS</span>' : '<span style="color:var(--red)">NUKAUTAS</span>'}<br>
-                        ID:<b>${p.id}</b><br>KODAS:<b>${p.key}</b>
+                <div class="gm-card-top">
+                    <img src="${p.photo}">
+                    <div class="gm-card-info">
+                        <b style="text-decoration: ${p.isAlive ? 'none' : 'line-through'}">${p.name}</b>
+                        <div class="gm-status">
+                            ${p.isAlive ? '<span style="color:var(--green)">GYVAS</span>' : '<span style="color:var(--red)">NUKAUTAS</span>'}<br>
+                            ID:<b>${p.id}</b><br>KODAS:<b>${p.key}</b>
+                        </div>
                     </div>
+                </div>
+                <div class="gm-actions">
+                    <button class="gm-btn" style="background:#444; color:white;" onclick="gmSwapTeam(${index})">KEISTI</button>
+                    <button class="gm-btn" style="background:var(--red); color:white;" onclick="gmDeletePlayer(${index})">ŠALINTI</button>
                 </div>
             </div>
         `).join('');
