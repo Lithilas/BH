@@ -2,95 +2,79 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Airsoft Bounty Hunter Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Airsoft Bounty Hunter</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <style>
-        :root { --red: #ff4d4d; --blue: #4d94ff; --dark: #121212; --gold: #ffd700; --green: #28a745; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--dark); color: white; padding: 15px; margin: 0; user-select: none; }
-        .container { max-width: 600px; margin: auto; }
-        .hidden { display: none; }
+        :root { --red: #ff4d4d; --blue: #4d94ff; --dark: #0a0a0a; --gold: #ffd700; --green: #28a745; }
+        body { font-family: sans-serif; background: var(--dark); color: white; margin: 0; padding: 15px; overflow-x: hidden; }
+        .container { max-width: 500px; margin: auto; }
+        .hidden { display: none !important; }
         
-        /* Setup Phase Styles */
-        #drop-zone { 
-            border: 3px dashed #444; padding: 30px; text-align: center; border-radius: 10px; 
-            background: #1a1a1a; cursor: pointer; margin: 15px 0; transition: 0.2s;
-        }
-        #drop-zone.dragover { border-color: var(--gold); background: #222; }
-        
-        .player-card { 
-            background: #222; margin: 10px 0; padding: 12px; border-radius: 8px; 
-            display: flex; align-items: center; gap: 15px; border-left: 5px solid #444;
-        }
-        .player-card img { width: 60px; height: 60px; border-radius: 5px; object-fit: cover; background: #000; }
-        .player-info { flex-grow: 1; }
-        .codes { font-family: monospace; color: var(--gold); font-weight: bold; font-size: 0.9rem; }
+        /* Setup Phase */
+        #drop-zone { border: 3px dashed #444; padding: 30px; text-align: center; border-radius: 10px; background: #151515; cursor: pointer; margin-top: 10px; }
+        .player-card { background: #1a1a1a; margin: 10px 0; padding: 12px; border-radius: 8px; display: flex; align-items: center; gap: 12px; border-left: 6px solid #444; }
+        .player-card img { width: 60px; height: 60px; border-radius: 4px; object-fit: cover; }
+        .player-info { flex: 1; }
+        .codes { font-family: monospace; color: var(--gold); font-size: 0.85rem; margin-top: 4px; }
 
-        /* Buttons & Tables */
+        /* Buttons */
         .action-btn { background: var(--gold); color: black; padding: 18px; border: none; font-weight: bold; width: 100%; cursor: pointer; margin-top: 10px; border-radius: 8px; font-size: 1.1rem; }
-        .team-btn { padding: 10px; border: none; color: white; opacity: 0.2; cursor: pointer; font-weight: bold; flex: 1; border-radius: 4px; }
-        .team-btn.active { opacity: 1; outline: 2px solid white; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #1a1a1a; }
-        th, td { border: 1px solid #333; padding: 10px; text-align: left; font-size: 0.9rem; }
+        .team-btn { padding: 12px 18px; border: none; color: white; opacity: 0.2; cursor: pointer; font-weight: bold; border-radius: 4px; font-size: 0.9rem; }
+        .team-btn.active { opacity: 1; outline: 2px solid white; transform: scale(1.05); }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #111; }
+        td { border: 1px solid #333; padding: 8px; }
 
-        /* Game Phase Styles */
-        #timer { font-size: 4.5rem; text-align: center; color: var(--gold); font-family: monospace; font-weight: bold; text-shadow: 0 0 10px rgba(255, 215, 0, 0.3); }
-        .target-frame { border: 4px solid var(--gold); padding: 15px; text-align: center; background: #000; margin-top: 15px; }
-        .target-img-large { width: 100%; height: 320px; object-fit: cover; border: 1px solid #333; }
-        input[type="number"] { font-size: 2.5rem; width: 120px; text-align: center; background: #111; color: #0f0; border: 2px solid #0f0; border-radius: 5px; margin: 10px 0; }
+        /* Game Phase */
+        #timer { font-size: 4rem; text-align: center; color: var(--gold); font-family: monospace; font-weight: bold; margin: 15px 0; }
+        .target-frame { border: 4px solid var(--gold); padding: 15px; text-align: center; background: #000; }
+        .target-img-large { width: 100%; height: 280px; object-fit: cover; border: 1px solid #333; }
+        .key-input { font-size: 2.5rem; width: 110px; text-align: center; background: #111; color: #0f0; border: 2px solid #0f0; border-radius: 8px; margin: 15px 0; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div id="setup-screen">
-        <h2 style="color:var(--gold)">1. GM: ENLIST PLAYERS</h2>
-        <input type="text" id="nameInput" placeholder="ENTER NAME..." style="width: 100%; padding: 15px; box-sizing: border-box; background: #222; color: white; border: 1px solid #444; font-size: 1.2rem; border-radius: 8px;">
-        
-        <div id="drop-zone">
-            <strong>DRAG & DROP PHOTO</strong><br><small>OR CLICK TO SELECT</small>
-        </div>
+    <div id="screen-enlist">
+        <h2 style="color:var(--gold)">1. ENLIST PLAYERS</h2>
+        <input type="text" id="nameInput" placeholder="PLAYER NAME..." style="width: 100%; padding: 15px; box-sizing: border-box; background: #222; color: white; border: 1px solid #444; border-radius: 8px;">
+        <div id="drop-zone"><strong>DRAG PHOTO HERE</strong><br><small>OR CLICK TO SELECT</small></div>
         <input type="file" id="fileInput" class="hidden" accept="image/*">
-
-        <h3 style="margin-top: 25px; border-bottom: 2px solid #333; padding-bottom: 5px;">CURRENT ROSTER (<span id="pCount">0</span>)</h3>
         <div id="playerList"></div>
-        
-        <button class="action-btn" onclick="showScreen('assign-screen')">NEXT: ASSIGN TEAMS</button>
+        <button class="action-btn" onclick="goToAssign()">NEXT: ASSIGN TEAMS</button>
     </div>
 
-    <div id="assign-screen" class="hidden">
+    <div id="screen-assign" class="hidden">
         <h2>2. ASSIGN TEAMS</h2>
         <div id="assignList"></div>
-        <button class="action-btn" style="background:var(--green)" onclick="showReview()">FINAL REVIEW</button>
-        <button class="action-btn" style="background:#333; color:white;" onclick="showScreen('setup-screen')">BACK TO ADDING</button>
+        <button class="action-btn" style="background:var(--green)" onclick="goToReview()">FINAL REVIEW</button>
+        <button class="action-btn" style="background:#333; color:white;" onclick="nav('screen-enlist')">BACK</button>
     </div>
 
-    <div id="review-screen" class="hidden">
+    <div id="screen-review" class="hidden">
         <h2>3. FINAL CONFIRMATION</h2>
         <div id="reviewTableArea"></div>
-        <button class="action-btn" style="background:var(--green)" onclick="startGlobalGame()">ACTIVATE & START CLOCK</button>
-        <button class="action-btn" style="background:#333; color:white;" onclick="showScreen('assign-screen')">BACK TO TEAMS</button>
+        <button class="action-btn" style="background:var(--green)" onclick="startGlobalGame()">START GAME (SYNC ALL)</button>
     </div>
 
-    <div id="game-screen" class="hidden">
+    <div id="screen-game" class="hidden">
         <div id="timer">60:00</div>
-        <h3 id="role-indicator" style="text-align: center; margin-top: 0;"></h3>
         <div id="hunt-ui" class="target-frame">
-            <p style="color:#888; margin: 5px 0;">PRIMARY TARGET:</p>
+            <p id="team-label" style="font-weight:bold;"></p>
             <img id="targetImg" class="target-img-large">
-            <h1 id="targetName" style="margin: 10px 0;">---</h1>
-            <h2 style="color:var(--gold); margin: 5px 0;">ID: <span id="targetID">--</span></h2>
-            <hr border="1" color="#222">
-            <input type="number" id="keyInput" placeholder="--">
-            <button onclick="checkKey()" class="action-btn" style="background:#a00; color:white;">CONFIRM KILL</button>
+            <h1 id="targetName" style="margin:10px 0;">--</h1>
+            <h2 style="color:var(--gold); margin:0;">ID: <span id="targetID">--</span></h2>
+            <input type="number" id="keyInput" class="key-input" placeholder="--">
+            <button onclick="submitKill()" class="action-btn" style="background:#a00; color:white;">CONFIRM KILL</button>
         </div>
     </div>
 </div>
 
 <script>
-    // --- STEP 1: FIREBASE CONFIG ---
+    // --- FIREBASE CONFIG ---
     const firebaseConfig = {
+        const firebaseConfig = {
   apiKey: "AIzaSyB1aSPG4BKYghWw2KKq_Ri4oqRbDeh4t_8",
   authDomain: "lithilas-bh.firebaseapp.com",
   projectId: "lithilas-bh",
@@ -100,205 +84,138 @@
   measurementId: "G-Y6FSWJD169"
 };
 
-    // Initialize Firebase
-    let db = null;
-    if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
-        firebase.initializeApp(firebaseConfig);
-        db = firebase.database();
-    }
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
 
-    let players = [];
-    let timerInterval = null;
-    let userRole = new URLSearchParams(window.location.search).get('role') || 'GM';
+    let players = []; 
+    let myRole = new URLSearchParams(window.location.search).get('role') || 'GM';
 
-    // --- STEP 2: PHOTO & DRAG DROP ---
-    const dropZone = document.getElementById('drop-zone');
-    const fileInput = document.getElementById('fileInput');
-
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => {
-        dropZone.addEventListener(e, ev => { ev.preventDefault(); ev.stopPropagation(); });
-    });
-
-    dropZone.onclick = () => fileInput.click();
-    dropZone.addEventListener('dragover', () => dropZone.classList.add('dragover'));
-    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-    
-    dropZone.addEventListener('drop', (e) => {
-        dropZone.classList.remove('dragover');
-        if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
-    });
-    fileInput.onchange = (e) => { if (e.target.files.length) handleFile(e.target.files[0]); };
+    // --- ENLIST LOGIC ---
+    const dz = document.getElementById('drop-zone');
+    const fi = document.getElementById('fileInput');
+    dz.onclick = () => fi.click();
+    ['dragover', 'drop'].forEach(e => dz.addEventListener(e, ev => ev.preventDefault()));
+    dz.addEventListener('drop', e => handleFile(e.dataTransfer.files[0]));
+    fi.onchange = e => handleFile(e.target.files[0]);
 
     function handleFile(file) {
-        const nameInp = document.getElementById('nameInput');
-        if (!nameInp.value) return alert("Enter player name first!");
-        
+        const name = document.getElementById('nameInput').value.trim();
+        if (!name) return alert("Enter name first!");
         const reader = new FileReader();
-        reader.onload = (e) => {
-            const newPlayer = {
-                name: nameInp.value,
-                photo: e.target.result,
+        reader.onload = e => {
+            players.push({
+                name, photo: e.target.result,
                 id: Math.floor(Math.random() * 90 + 10),
                 key: Math.floor(Math.random() * 90 + 10),
-                team: '',
-                isAlive: true
-            };
-
-            // Local Update
-            players.push(newPlayer);
-            renderAll(); 
-
-            // Firebase Sync
-            if (db) db.ref('players').push(newPlayer);
-            nameInp.value = ''; 
+                team: '', isAlive: true
+            });
+            document.getElementById('nameInput').value = '';
+            renderEnlistList();
         };
         reader.readAsDataURL(file);
     }
 
-    // --- STEP 3: RENDER & TEAM LOGIC ---
-    function renderAll() {
-        document.getElementById('pCount').innerText = players.length;
-
-        // Setup Screen List
+    function renderEnlistList() {
         document.getElementById('playerList').innerHTML = players.map(p => `
-            <div class="player-card">
-                <img src="${p.photo}">
-                <div class="player-info">
-                    <b>${p.name}</b>
-                    <div class="codes">ID: ${p.id} | KEY: ${p.key}</div>
-                </div>
-            </div>
+            <div class="player-card"><img src="${p.photo}"><div class="player-info"><b>${p.name}</b><div class="codes">ID: ${p.id} | KEY: ${p.key}</div></div></div>
         `).join('');
+    }
 
-        // Assignment List
+    // --- ASSIGN LOGIC ---
+    function goToAssign() {
+        if(players.length < 1) return alert("Add players first!");
+        nav('screen-assign');
+        renderAssignList();
+    }
+
+    function renderAssignList() {
         document.getElementById('assignList').innerHTML = players.map((p, i) => `
             <div class="player-card" style="border-left-color:${p.team==='RAUDONA'?'red':p.team==='MELYNA'?'blue':'#444'}">
-                <img src="${p.photo}">
-                <b style="flex:1">${p.name}</b>
+                <img src="${p.photo}"><b style="flex:1">${p.name}</b>
                 <div style="display:flex; gap:5px;">
-                    <button class="team-btn ${p.team==='RAUDONA'?'active':''}" style="background:var(--red)" onclick="updateTeamRemote('${p.name}','RAUDONA')">RED</button>
-                    <button class="team-btn ${p.team==='MELYNA'?'active':''}" style="background:var(--blue)" onclick="updateTeamRemote('${p.name}','MELYNA')">BLUE</button>
+                    <button class="team-btn ${p.team==='RAUDONA'?'active':''}" style="background:var(--red)" onclick="setTeam(${i},'RAUDONA')">RED</button>
+                    <button class="team-btn ${p.team==='MELYNA'?'active':''}" style="background:var(--blue)" onclick="setTeam(${i},'MELYNA')">BLUE</button>
                 </div>
             </div>
         `).join('');
     }
 
-    function updateTeamRemote(pName, teamName) {
-        if (db) {
-            db.ref('players').once('value', snap => {
-                snap.forEach(c => { if(c.val().name === pName) c.ref.update({ team: teamName }); });
-            });
-        } else {
-            const p = players.find(x => x.name === pName);
-            if(p) p.team = teamName;
-            renderAll();
-        }
+    function setTeam(index, team) {
+        players[index].team = team;
+        renderAssignList(); // Updates buttons instantly
     }
 
-    function showReview() {
-        if (players.some(p => !p.team)) return alert("Assign teams to everyone first!");
-        showScreen('review-screen');
-        let html = '<table><tr><th>NAME</th><th>TEAM</th><th>ID</th><th>KEY</th></tr>';
+    // --- REVIEW & SYNC ---
+    function goToReview() {
+        if (players.some(p => !p.team)) return alert("Assign all teams!");
+        nav('screen-review');
+        let html = '<table>';
         players.forEach(p => {
-            html += `<tr style="color:${p.team==='RAUDONA'?'#ff4d4d':'#4d94ff'}"><td>${p.name}</td><td>${p.team}</td><td>${p.id}</td><td>${p.key}</td></tr>`;
+            html += `<tr style="color:${p.team==='RAUDONA'?'#ff4d4d':'#4d94ff'}"><td>${p.name}</td><td>${p.team}</td><td>ID:${p.id}</td><td>KEY:${p.key}</td></tr>`;
         });
         document.getElementById('reviewTableArea').innerHTML = html + '</table>';
     }
 
-    function showScreen(id) {
-        ['setup-screen', 'assign-screen', 'review-screen', 'game-screen'].forEach(s => {
-            document.getElementById(s).classList.add('hidden');
-        });
-        document.getElementById(id).classList.remove('hidden');
+    function startGlobalGame() {
+        // Now push everything to Firebase at once
+        db.ref('players').set(players);
+        db.ref('gameStatus').set({ started: true, startTime: Date.now() });
     }
 
-    // --- STEP 4: TIMER & GAME SYNC ---
-    function startTimer(startTime) {
-        clearInterval(timerInterval);
-        const duration = 3600; // 1 Hour
-
-        timerInterval = setInterval(() => {
-            const elapsed = Math.floor((Date.now() - startTime) / 1000);
-            const remaining = duration - elapsed;
-
-            if (remaining <= 0) {
-                document.getElementById('timer').innerText = "00:00";
-                clearInterval(timerInterval);
-                return;
-            }
-
-            const mins = Math.floor(remaining / 60);
-            const secs = remaining % 60;
-            document.getElementById('timer').innerText = `${mins}:${secs < 10 ? '0'+secs : secs}`;
+    // --- GAMEPLAY ---
+    function runTimer(startTime) {
+        setInterval(() => {
+            const remaining = 3600 - Math.floor((Date.now() - startTime) / 1000);
+            if (remaining <= 0) return document.getElementById('timer').innerText = "00:00";
+            const m = Math.floor(remaining / 60);
+            const s = remaining % 60;
+            document.getElementById('timer').innerText = `${m}:${s < 10 ? '0'+s : s}`;
         }, 1000);
     }
 
-    function startGlobalGame() {
-        const timeNow = Date.now();
-        if (db) {
-            db.ref('gameStatus').set({ started: true, serverStartTime: timeNow });
-        } else {
-            showScreen('game-screen');
-            startTimer(timeNow);
-            updateTarget();
-        }
-    }
-
     function updateTarget() {
-        if (userRole === 'GM' || !players.length) return;
-        const enemies = players.filter(p => p.team !== userRole && p.isAlive);
-        const ui = document.getElementById('hunt-ui');
+        if (myRole === 'GM') return;
+        document.getElementById('team-label').innerText = "OPERATIVE: " + myRole;
+        document.getElementById('team-label').style.color = myRole === 'RAUDONA' ? 'var(--red)' : 'var(--blue)';
         
-        if (enemies.length === 0) {
-            ui.innerHTML = "<h2>MISSION COMPLETE<br>ALL TARGETS ELIMINATED</h2>";
-            return;
-        }
-        const target = enemies[0];
+        const target = players.find(p => p.team !== myRole && p.isAlive);
+        if (!target) return document.getElementById('hunt-ui').innerHTML = "<h2>MISSION COMPLETE</h2>";
+
         document.getElementById('targetImg').src = target.photo;
         document.getElementById('targetName').innerText = target.name;
         document.getElementById('targetID').innerText = target.id;
-        document.getElementById('keyInput').value = '';
+        window.activeKey = target.key;
     }
 
-    function checkKey() {
-        const input = document.getElementById('keyInput').value;
-        const enemies = players.filter(p => p.team !== userRole && p.isAlive);
-        if (!enemies.length) return;
-
-        if (input == enemies[0].key) {
+    function submitKill() {
+        if (document.getElementById('keyInput').value == window.activeKey) {
+            const target = players.find(p => p.team !== myRole && p.isAlive);
+            db.ref('players').once('value', snap => {
+                snap.forEach(c => { if(c.val().name === target.name) c.ref.update({ isAlive: false }); });
+            });
             alert("KILL CONFIRMED");
-            const tName = enemies[0].name;
-            if (db) {
-                db.ref('players').once('value', snap => {
-                    snap.forEach(c => { if(c.val().name === tName) c.ref.update({ isAlive: false }); });
-                });
-            } else {
-                enemies[0].isAlive = false;
-                updateTarget();
-            }
-        } else {
-            alert("INVALID KEY!");
-        }
+        } else alert("INVALID KEY");
     }
 
-    // --- FIREBASE LISTENERS ---
-    if (db) {
-        db.ref('gameStatus').on('value', snap => {
-            const status = snap.val();
-            if (status && status.started) {
-                showScreen('game-screen');
-                document.getElementById('role-indicator').innerText = "TEAM: " + userRole;
-                document.getElementById('role-indicator').style.color = userRole === 'RAUDONA' ? 'var(--red)' : 'var(--blue)';
-                startTimer(status.serverStartTime);
-                updateTarget();
-            }
-        });
-        db.ref('players').on('value', snap => {
-            const data = snap.val();
-            players = data ? Object.values(data) : [];
-            renderAll();
-            if (!document.getElementById('game-screen').classList.contains('hidden')) updateTarget();
-        });
+    // --- REMOTE LISTENERS ---
+    db.ref('gameStatus').on('value', snap => {
+        const s = snap.val();
+        if (s && s.started) {
+            nav('screen-game');
+            runTimer(s.startTime);
+        }
+    });
+
+    db.ref('players').on('value', snap => {
+        if (snap.exists()) {
+            players = Object.values(snap.val());
+            if (document.getElementById('screen-game').classList.contains('hidden') === false) updateTarget();
+        }
+    });
+
+    function nav(id) {
+        document.querySelectorAll('.container > div').forEach(d => d.classList.add('hidden'));
+        document.getElementById(id).classList.remove('hidden');
     }
 </script>
 </body>
