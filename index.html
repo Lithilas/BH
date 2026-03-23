@@ -25,7 +25,8 @@
         .player-card img { width: 60px; height: 60px; border-radius: 4px; object-fit: cover; background: #000; }
         
         /* Buttons */
-        .action-btn { background: var(--gold); color: black; padding: 18px; border: none; font-weight: bold; width: 100%; cursor: pointer; border-radius: 8px; font-size: 1.1rem; margin-top: 10px; }
+        .action-btn { background: var(--gold); color: black; padding: 18px; border: none; font-weight: bold; width: 100%; cursor: pointer; border-radius: 8px; font-size: 1.1rem; margin-top: 10px; transition: 0.3s; }
+        .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .team-btn { padding: 12px; border: none; color: white; opacity: 0.2; cursor: pointer; font-weight: bold; flex: 1; border-radius: 4px; }
         .team-btn.active { opacity: 1; outline: 2px solid white; transform: scale(1.05); }
         
@@ -33,7 +34,8 @@
         #timer { font-size: 4rem; text-align: center; color: var(--gold); font-family: monospace; font-weight: bold; margin: 15px 0; }
         .target-frame { border: 4px solid var(--gold); padding: 15px; text-align: center; background: #000; }
         .target-img { width: 100%; height: 280px; object-fit: cover; border: 1px solid #333; }
-        input[type="number"] { font-size: 2.5rem; width: 120px; text-align: center; background: #111; color: #0f0; border: 2px solid #0f0; border-radius: 8px; margin: 15px 0; }
+        input[type="number"] { font-size: 2.5rem; width: 120px; text-align: center; background: #111; color: #0f0; border: 2px solid #0f0; border-radius: 8px; margin: 15px 0; transition: 0.3s; }
+        input[type="number"]:disabled { background: #333; border-color: #555; color: #555; }
         
         /* GM Dashboard */
         .gm-status { font-size: 0.85rem; color: #aaa; margin-top: 5px; }
@@ -73,7 +75,7 @@
             <h1 id="targetName" style="margin:10px 0;">--</h1>
             <h2 style="color:var(--gold); margin:0;">ID: <span id="targetID">--</span></h2>
             <input type="number" id="keyInput" placeholder="--">
-            <button onclick="checkKill()" class="action-btn" style="background:#a00; color:white;">CONFIRM KILL</button>
+            <button id="killBtn" onclick="checkKill()" class="action-btn" style="background:#a00; color:white;">CONFIRM KILL</button>
         </div>
 
         <div id="gm-dashboard" class="hidden">
@@ -103,7 +105,6 @@
     let myRole = new URLSearchParams(window.location.search).get('role') || 'GM';
     let timerInterval;
 
-    // Pradinis puslapio užkrovimas
     window.onload = () => {
         if (myRole !== 'GM') {
             document.getElementById('screen-enlist').classList.add('hidden');
@@ -201,29 +202,23 @@
         db.ref('gameStatus').set({ started: true, startTime: Date.now() });
     }
 
-    // Nauja: žaidimo perkrovimo funkcija
     window.resetGame = function() {
         if (!confirm("Ar tikrai norite IŠTRINTI visus duomenis ir perkrauti žaidimą?")) return;
         
-        // Išvalome duomenų bazę
         db.ref('players').remove();
         db.ref('gameStatus').set({ started: false });
         
-        // Išvalome vietinius sąrašus
         players = [];
         document.getElementById('playerList').innerHTML = '';
         document.getElementById('assignList').innerHTML = '';
     }
 
-    // Atnaujintas būsenos klausymasis
     db.ref('gameStatus').on('value', snap => {
         const status = snap.val();
         
-        // Paslepiame viską prieš nusprendžiant, ką rodyti
         document.querySelectorAll('.container > div').forEach(d => d.classList.add('hidden'));
 
         if (status && status.started) {
-            // ŽAIDIMAS VYKSTA
             document.getElementById('screen-game').classList.remove('hidden');
             
             if (myRole === 'GM') {
@@ -235,7 +230,6 @@
             }
             startTimer(status.startTime);
         } else {
-            // ŽAIDIMAS NEPRASIDĖJĘS / PERKRAUTAS
             clearInterval(timerInterval);
             if (myRole === 'GM') {
                 document.getElementById('screen-enlist').classList.remove('hidden');
@@ -249,7 +243,7 @@
         if (snap.exists()) {
             players = Object.values(snap.val());
         } else {
-            players = []; // Išvalome vietinį masyvą, jei bazė ištrinta
+            players = []; 
         }
         
         if (myRole !== 'GM') {
@@ -273,7 +267,6 @@
     }
 
     function updateTarget() {
-        // Jei žaidėjų sąrašas tuščias, nedarome nieko (išvengiame klaidų)
         if (players.length === 0) return;
 
         const target = players.find(p => p.team !== myRole && p.isAlive);
@@ -283,14 +276,13 @@
             return;
         }
         
-        // Atstatome taikinio UI, jei prieš tai buvo įjungtas "Mission Complete"
         if (!document.getElementById('targetImg')) {
             document.getElementById('hunt-ui').innerHTML = `
                 <img id="targetImg" class="target-img" src="${target.photo}">
                 <h1 id="targetName" style="margin:10px 0;">${target.name}</h1>
                 <h2 style="color:var(--gold); margin:0;">ID: <span id="targetID">${target.id}</span></h2>
                 <input type="number" id="keyInput" placeholder="--">
-                <button onclick="checkKill()" class="action-btn" style="background:#a00; color:white;">CONFIRM KILL</button>
+                <button id="killBtn" onclick="checkKill()" class="action-btn" style="background:#a00; color:white;">CONFIRM KILL</button>
             `;
         } else {
             document.getElementById('targetImg').src = target.photo;
@@ -302,10 +294,14 @@
         if(document.getElementById('keyInput')) document.getElementById('keyInput').value = ''; 
     }
 
+    // Apsauga nuo spėliojimo (15s užraktas)
     window.checkKill = function() {
         if (!window.activeKey) return alert("NO TARGET FOUND!");
         
-        const input = document.getElementById('keyInput').value;
+        const inputField = document.getElementById('keyInput');
+        const killBtn = document.getElementById('killBtn');
+        const input = inputField.value;
+
         if (input == window.activeKey) {
             const target = players.find(p => p.team !== myRole && p.isAlive);
             if(!target) return;
@@ -319,7 +315,27 @@
             });
             alert("KILL CONFIRMED!");
         } else {
-            alert("INVALID KEY!");
+            // Neteisingas kodas - pradedam 15 sekundžių baudą
+            inputField.disabled = true;
+            killBtn.disabled = true;
+            inputField.value = '';
+            
+            let timeLeft = 15;
+            killBtn.style.background = "#555";
+            killBtn.innerText = `BLOKUOTA (${timeLeft}s)`;
+
+            const penaltyTimer = setInterval(() => {
+                timeLeft--;
+                if (timeLeft <= 0) {
+                    clearInterval(penaltyTimer);
+                    inputField.disabled = false;
+                    killBtn.disabled = false;
+                    killBtn.style.background = "#a00";
+                    killBtn.innerText = "CONFIRM KILL";
+                } else {
+                    killBtn.innerText = `BLOKUOTA (${timeLeft}s)`;
+                }
+            }, 1000);
         }
     }
 
