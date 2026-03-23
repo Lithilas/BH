@@ -100,6 +100,18 @@
     </div>
 </div>
 
+<div id="killer-modal" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); display:flex; align-items:center; justify-content:center; z-index:9999;">
+    <div style="background:#151515; padding:25px; border-radius:12px; border:2px solid var(--gold); text-align:center; width:90%; max-width:400px; box-sizing:border-box;">
+        <h3 style="color:var(--gold); margin-top:0;">TAIKINYS NUKAUTAS!</h3>
+        <p style="font-size:1rem; margin-bottom:15px;">Įveskite SAVO žaidėjo kodą, kad gautumėte tašką:</p>
+        <input type="tel" inputmode="numeric" pattern="[0-9]*" id="killerCodeInput" placeholder="TAVO KODAS" style="width:100%; margin:10px 0 20px 0;">
+        <div style="display:flex; gap:10px;">
+            <button class="action-btn" style="background:#555; color:white; margin:0;" onclick="closeKillerModal()">ATŠAUKTI</button>
+            <button class="action-btn" style="background:var(--green); color:white; margin:0;" onclick="confirmKillerCode()">PATVIRTINTI</button>
+        </div>
+    </div>
+</div>
+
 <script>
     const firebaseConfig = {
         apiKey: "AIzaSyB1aSPG4BKYghWw2KKq_Ri4oqRbDeh4t_8",
@@ -341,7 +353,7 @@
                 <h1 id="targetName" style="margin:10px 0;">${target.name}</h1>
                 <h2 style="color:var(--gold); margin:0;">ID: <span id="targetID">${target.id}</span></h2>
                 
-                <input type="tel" inputmode="numeric" id="keyInput" placeholder="--">
+                <input type="tel" inputmode="numeric" pattern="[0-9]*" id="keyInput" placeholder="--">
                 
                 <button id="killBtn" onclick="checkKill()" class="action-btn" style="background:#a00; color:white;">PATVIRTINTI NUŽUDYMĄ</button>
             `;
@@ -369,7 +381,11 @@
         `;
     }
 
-    // Pataisyta funkcija, kuri PAKLAUSIA, kas nužudė
+    // Modalų valdymas
+    window.closeKillerModal = function() {
+        document.getElementById('killer-modal').classList.add('hidden');
+    }
+
     window.checkKill = function() {
         if (!window.activeKey) return alert("TAIKINYS NERASTAS!");
         
@@ -380,35 +396,10 @@
         if (!input) return alert("Būtina įvesti taikinio kodą!");
 
         if (input === window.activeKey) {
-            // Iššoka langelis, kuris klausia žudiko kodo
-            const hunterCodeStr = prompt("Taikinys nukautas! Įveskite SAVO žaidėjo kodą, kad gautumėte tašką:");
-            
-            if (!hunterCodeStr) return; // Jei paspaudžia "Atšaukti"
-
-            const hunterCodeVal = parseInt(hunterCodeStr);
-            const validHunter = players.find(p => p.team === myRole && p.isAlive && p.key === hunterCodeVal);
-
-            if (validHunter) {
-                const target = players.find(p => p.team !== myRole && p.isAlive);
-                if(!target) return;
-
-                db.ref('players').once('value', snap => {
-                    snap.forEach(c => { 
-                        const val = c.val();
-                        if(val.id === target.id) {
-                            c.ref.update({ isAlive: false }); 
-                        }
-                        if(val.id === validHunter.id) {
-                            c.ref.update({ kills: (val.kills || 0) + 1 });
-                        }
-                    });
-                });
-                alert("NUŽUDYMAS PATVIRTINTAS! Taškas skirtas žaidėjui: " + validHunter.name);
-            } else {
-                alert("KLAIDA: Neteisingas tavo kodas! Taškas neskirtas. Bandykite dar kartą.");
-            }
+            // Atidarome pasirinktinį langą, kuriame bus skaičių klaviatūra
+            document.getElementById('killerCodeInput').value = '';
+            document.getElementById('killer-modal').classList.remove('hidden');
         } else {
-            // Neteisingas taikinio kodas
             inputField.disabled = true;
             killBtn.disabled = true;
             inputField.value = '';
@@ -429,6 +420,37 @@
                     killBtn.innerText = `BLOKUOTA (${timeLeft}s)`;
                 }
             }, 1000);
+        }
+    }
+
+    // Funkcija, kuri paleidžiama patvirtinus savo kodą modale
+    window.confirmKillerCode = function() {
+        const hunterCodeStr = document.getElementById('killerCodeInput').value;
+        if (!hunterCodeStr) return alert("Būtina įvesti savo kodą!");
+        
+        const hunterCodeVal = parseInt(hunterCodeStr);
+        const validHunter = players.find(p => p.team === myRole && p.isAlive && p.key === hunterCodeVal);
+
+        if (validHunter) {
+            const target = players.find(p => p.team !== myRole && p.isAlive);
+            if(!target) return;
+
+            db.ref('players').once('value', snap => {
+                snap.forEach(c => { 
+                    const val = c.val();
+                    if(val.id === target.id) {
+                        c.ref.update({ isAlive: false }); 
+                    }
+                    if(val.id === validHunter.id) {
+                        c.ref.update({ kills: (val.kills || 0) + 1 });
+                    }
+                });
+            });
+            alert("NUŽUDYMAS PATVIRTINTAS! Taškas skirtas žaidėjui: " + validHunter.name);
+            closeKillerModal();
+        } else {
+            alert("KLAIDA: Neteisingas tavo kodas! Taškas neskirtas. Bandykite dar kartą.");
+            closeKillerModal();
         }
     }
 
