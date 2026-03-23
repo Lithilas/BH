@@ -12,39 +12,47 @@
         .container { max-width: 500px; margin: auto; }
         .hidden { display: none !important; }
         
-        /* UI */
-        #drop-zone { border: 3px dashed #444; padding: 25px; text-align: center; background: #151515; border-radius: 10px; cursor: pointer; }
-        .player-card { background: #1a1a1a; margin: 10px 0; padding: 10px; border-radius: 8px; display: flex; align-items: center; gap: 10px; border-left: 5px solid #444; }
-        .player-card img { width: 50px; height: 50px; border-radius: 4px; object-fit: cover; background: #000; }
+        /* THE DRAG ZONE */
+        #drop-zone { 
+            border: 4px dashed #555; padding: 40px; text-align: center; 
+            background: #151515; border-radius: 15px; cursor: pointer;
+            transition: 0.2s; color: #888; margin: 15px 0;
+        }
+        #drop-zone.drag-over { border-color: var(--gold); background: #222; color: var(--gold); }
         
-        /* Buttons */
-        .action-btn { background: var(--gold); color: black; padding: 15px; border: none; font-weight: bold; width: 100%; cursor: pointer; border-radius: 8px; font-size: 1rem; margin-top: 10px; }
-        .team-btn { padding: 10px; border: none; color: white; opacity: 0.2; cursor: pointer; font-weight: bold; flex: 1; border-radius: 4px; }
+        .player-card { background: #1a1a1a; margin: 10px 0; padding: 12px; border-radius: 8px; display: flex; align-items: center; gap: 12px; border-left: 6px solid #444; }
+        .player-card img { width: 60px; height: 60px; border-radius: 4px; object-fit: cover; background: #000; }
+        
+        .action-btn { background: var(--gold); color: black; padding: 18px; border: none; font-weight: bold; width: 100%; cursor: pointer; border-radius: 8px; font-size: 1.1rem; margin-top: 10px; }
+        .team-btn { padding: 12px; border: none; color: white; opacity: 0.2; cursor: pointer; font-weight: bold; flex: 1; border-radius: 4px; }
         .team-btn.active { opacity: 1; outline: 2px solid white; }
         
-        /* Game UI */
-        #timer { font-size: 3.5rem; text-align: center; color: var(--gold); font-family: monospace; }
-        .target-frame { border: 3px solid var(--gold); padding: 15px; text-align: center; background: #000; }
-        .target-img { width: 100%; height: 250px; object-fit: cover; }
-        .key-input { font-size: 2rem; width: 100px; text-align: center; background: #111; color: #0f0; border: 1px solid #0f0; margin: 10px; }
+        #timer { font-size: 4rem; text-align: center; color: var(--gold); font-family: monospace; font-weight: bold; }
+        .target-frame { border: 4px solid var(--gold); padding: 15px; text-align: center; background: #000; }
+        .target-img { width: 100%; height: 280px; object-fit: cover; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <div id="screen-enlist">
-        <h2>1. ENLIST</h2>
-        <input type="text" id="nameInput" placeholder="PLAYER NAME..." style="width:100%; padding:15px; box-sizing:border-box; background:#222; color:white; border:1px solid #444;">
-        <div id="drop-zone" onclick="document.getElementById('fileInput').click()">CLICK TO UPLOAD PHOTO</div>
+        <h2 style="color:var(--gold)">1. DRAG & DROP PLAYERS</h2>
+        <input type="text" id="nameInput" placeholder="TYPE NAME FIRST..." style="width:100%; padding:15px; box-sizing:border-box; background:#222; color:white; border:1px solid #444; border-radius: 8px; font-size: 1.1rem;">
+        
+        <div id="drop-zone">
+            <b style="font-size: 1.2rem;">DRAG PHOTO HERE</b><br>
+            <span>OR CLICK TO UPLOAD</span>
+        </div>
         <input type="file" id="fileInput" class="hidden" accept="image/*">
+        
         <div id="playerList"></div>
         <button class="action-btn" onclick="showAssign()">NEXT: ASSIGN TEAMS</button>
     </div>
 
     <div id="screen-assign" class="hidden">
-        <h2>2. ASSIGN</h2>
+        <h2>2. ASSIGN TEAMS</h2>
         <div id="assignList"></div>
-        <button class="action-btn" onclick="pushFinal()">START GAME</button>
+        <button class="action-btn" style="background: #28a745;" onclick="pushFinal()">START GAME (SYNC ALL)</button>
     </div>
 
     <div id="screen-game" class="hidden">
@@ -52,14 +60,14 @@
         <div id="hunt-ui" class="target-frame">
             <img id="targetImg" class="target-img">
             <h1 id="targetName">--</h1>
-            <input type="number" id="keyInput" class="key-input">
-            <button onclick="submitKill()" class="action-btn" style="background:red; color:white;">KILL CONFIRMED</button>
+            <input type="number" id="keyInput" style="font-size:2.5rem; width:120px; text-align:center; background:#111; color:#0f0; border:2px solid #0f0; margin:10px;">
+            <button onclick="submitKill()" class="action-btn" style="background:#a00; color:white;">KILL CONFIRMED</button>
         </div>
     </div>
 </div>
 
 <script>
-    // --- FIREBASE CONFIG (ADD YOURS) ---
+    // --- FIREBASE CONFIG ---
     const firebaseConfig = {
   apiKey: "AIzaSyB1aSPG4BKYghWw2KKq_Ri4oqRbDeh4t_8",
   authDomain: "lithilas-bh.firebaseapp.com",
@@ -69,82 +77,106 @@
   appId: "1:971183564853:web:2772ee6826ba1fa54d297c",
   measurementId: "G-Y6FSWJD169"
 };
-
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
     let players = [];
     let myRole = new URLSearchParams(window.location.search).get('role') || 'GM';
 
-    // 1. FILE & COMPRESSION
-    document.getElementById('fileInput').onchange = function(e) {
-        const name = document.getElementById('nameInput').value;
-        if(!name) return alert("Enter name first");
-        
+    // --- DRAG AND DROP LOGIC ---
+    const dz = document.getElementById('drop-zone');
+    const fi = document.getElementById('fileInput');
+
+    // Prevent default browser behavior (opening the image)
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => {
+        dz.addEventListener(e, (ev) => { ev.preventDefault(); ev.stopPropagation(); });
+    });
+
+    dz.addEventListener('dragover', () => dz.classList.add('drag-over'));
+    dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+    dz.onclick = () => fi.click();
+
+    dz.addEventListener('drop', (e) => {
+        dz.classList.remove('drag-over');
+        if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+
+    fi.onchange = (e) => { if (e.target.files.length) handleFile(e.target.files[0]); };
+
+    function handleFile(file) {
+        const nameInput = document.getElementById('nameInput');
+        const nameVal = nameInput.value.trim();
+        if (!nameVal) return alert("Error: Please enter the player's name first!");
+
         const reader = new FileReader();
-        reader.readAsDataURL(e.target.files[0]);
-        reader.onload = function(event) {
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
             const img = new Image();
             img.src = event.target.result;
-            img.onload = function() {
+            img.onload = () => {
+                // Compress for Database
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
-                canvas.width = 400; // Small width
+                canvas.width = 400; 
                 canvas.height = img.height * (400 / img.width);
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 
-                const compressed = canvas.toDataURL('image/jpeg', 0.5); // 50% Quality
+                const finalPhoto = canvas.toDataURL('image/jpeg', 0.6);
+                
+                // ADD TO LIST INSTANTLY
                 players.push({
-                    name: name,
-                    photo: compressed,
-                    id: Math.floor(Math.random()*90+10),
-                    key: Math.floor(Math.random()*90+10),
+                    name: nameVal,
+                    photo: finalPhoto,
+                    id: Math.floor(Math.random() * 90 + 10),
+                    key: Math.floor(Math.random() * 90 + 10),
                     team: '', isAlive: true
                 });
-                document.getElementById('nameInput').value = '';
-                renderEnlist();
+
+                nameInput.value = ''; // Reset input
+                renderEnlist(); // Redraw list
             };
         };
-    };
-
-    function renderEnlist() {
-        let html = '';
-        for(let p of players) {
-            html += `<div class="player-card"><img src="${p.photo}"><b>${p.name}</b></div>`;
-        }
-        document.getElementById('playerList').innerHTML = html;
     }
 
-    // 2. TEAM ASSIGNMENT (THE FIX)
-    function showAssign() {
+    function renderEnlist() {
+        document.getElementById('playerList').innerHTML = players.map(p => `
+            <div class="player-card">
+                <img src="${p.photo}">
+                <b>${p.name}</b>
+            </div>
+        `).join('');
+    }
+
+    // --- ASSIGNMENT LOGIC ---
+    window.showAssign = function() {
+        if(players.length === 0) return alert("Add at least one player.");
         document.getElementById('screen-enlist').classList.add('hidden');
         document.getElementById('screen-assign').classList.remove('hidden');
         renderAssign();
-    }
+    };
 
     function renderAssign() {
-        let html = '';
-        players.forEach((p, i) => {
-            html += `
+        document.getElementById('assignList').innerHTML = players.map((p, i) => `
             <div class="player-card" style="border-left-color:${p.team==='RED'?'red':p.team==='BLUE'?'blue':'#444'}">
                 <img src="${p.photo}"><b style="flex:1">${p.name}</b>
                 <button class="team-btn ${p.team==='RED'?'active':''}" style="background:red" onclick="setTeam(${i},'RED')">RED</button>
                 <button class="team-btn ${p.team==='BLUE'?'active':''}" style="background:blue" onclick="setTeam(${i},'BLUE')">BLUE</button>
-            </div>`;
-        });
-        document.getElementById('assignList').innerHTML = html;
+            </div>
+        `).join('');
     }
 
-    window.setTeam = function(i, team) {
-        players[i].team = team;
+    window.setTeam = function(idx, team) {
+        players[idx].team = team;
         renderAssign(); // Refresh UI instantly
     };
 
-    // 3. PUSH & SYNC
-    function pushFinal() {
+    // --- GAME START ---
+    window.pushFinal = function() {
+        if(players.some(p => !p.team)) return alert("Assign all teams first!");
         db.ref('players').set(players);
         db.ref('gameStatus').set({ started: true, startTime: Date.now() });
-    }
+    };
 
+    // Listeners for Sync
     db.ref('gameStatus').on('value', snap => {
         if(snap.val()?.started) {
             document.querySelectorAll('.container > div').forEach(d => d.classList.add('hidden'));
@@ -177,8 +209,8 @@
             db.ref('players').once('value', snap => {
                 snap.forEach(c => { if(c.val().name === target.name) c.ref.update({ isAlive: false }); });
             });
-            alert("DONE");
-        } else alert("WRONG");
+            alert("KILL CONFIRMED");
+        } else alert("WRONG KEY");
     };
 </script>
 </body>
