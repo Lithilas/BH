@@ -199,3 +199,166 @@
         if (players.some(p => !p.team)) return alert("Priskirkite visus žaidėjus komandoms!");
         
         // Sumaišome žaidėjų masyvą atsitiktine tvarka (Fisher-Yates)
+        for (let i = players.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [players[i], players[j]] = [players[j], players[i]];
+        }
+
+        db.ref('players').set(players);
+        db.ref('gameStatus').set({ started: true, startTime: Date.now() });
+    }
+
+    window.resetGame = function() {
+        if (!confirm("Ar tikrai norite IŠTRINTI visus duomenis ir perkrauti žaidimą?")) return;
+        
+        db.ref('players').remove();
+        db.ref('gameStatus').set({ started: false });
+        
+        players = [];
+        document.getElementById('playerList').innerHTML = '';
+        document.getElementById('assignList').innerHTML = '';
+    }
+
+    db.ref('gameStatus').on('value', snap => {
+        const status = snap.val();
+        
+        document.querySelectorAll('.container > div').forEach(d => d.classList.add('hidden'));
+
+        if (status && status.started) {
+            document.getElementById('screen-game').classList.remove('hidden');
+            
+            if (myRole === 'GM') {
+                document.getElementById('hunt-ui').classList.add('hidden');
+                document.getElementById('gm-dashboard').classList.remove('hidden');
+                renderGMDashboard();
+            } else {
+                document.getElementById('hunt-ui').classList.remove('hidden');
+            }
+            startTimer(status.startTime);
+        } else {
+            clearInterval(timerInterval);
+            if (myRole === 'GM') {
+                document.getElementById('screen-enlist').classList.remove('hidden');
+            } else {
+                document.getElementById('screen-wait').classList.remove('hidden');
+            }
+        }
+    });
+
+    db.ref('players').on('value', snap => {
+        if (snap.exists()) {
+            players = Object.values(snap.val());
+        } else {
+            players = []; 
+        }
+        
+        if (myRole !== 'GM') {
+            updateTarget();
+        } else {
+            renderGMDashboard();
+        }
+    });
+
+    function startTimer(startTime) {
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            const rem = 3600 - Math.floor((Date.now() - startTime) / 1000);
+            if (rem <= 0) {
+                clearInterval(timerInterval);
+                return document.getElementById('timer').innerText = "00:00";
+            }
+            const m = Math.floor(rem / 60), s = rem % 60;
+            document.getElementById('timer').innerText = `${m}:${s < 10 ? '0'+s : s}`;
+        }, 1000);
+    }
+
+    function updateTarget() {
+        if (players.length === 0) return;
+
+        const target = players.find(p => p.team !== myRole && p.isAlive);
+        if (!target) {
+            document.getElementById('hunt-ui').innerHTML = "<h1 style='color:var(--green); text-align:center;'>MISIJA ĮVYKDYTA</h1>";
+            window.activeKey = null;
+            return;
+        }
+        
+        if (!document.getElementById('targetImg')) {
+            document.getElementById('hunt-ui').innerHTML = `
+                <img id="targetImg" class="target-img" src="${target.photo}">
+                <h1 id="targetName" style="margin:10px 0;">${target.name}</h1>
+                <h2 style="color:var(--gold); margin:0;">ID: <span id="targetID">${target.id}</span></h2>
+                <input type="number" id="keyInput" placeholder="--">
+                <button id="killBtn" onclick="checkKill()" class="action-btn" style="background:#a00; color:white;">PATVIRTINTI NUŽUDYMĄ</button>
+            `;
+        } else {
+            document.getElementById('targetImg').src = target.photo;
+            document.getElementById('targetName').innerText = target.name;
+            document.getElementById('targetID').innerText = target.id;
+        }
+        
+        window.activeKey = target.key;
+        if(document.getElementById('keyInput')) document.getElementById('keyInput').value = ''; 
+    }
+
+    // Apsauga nuo spėliojimo (15s užraktas)
+    window.checkKill = function() {
+        if (!window.activeKey) return alert("TAIKINYS NERASTAS!");
+        
+        const inputField = document.getElementById('keyInput');
+        const killBtn = document.getElementById('killBtn');
+        const input = inputField.value;
+
+        if (input == window.activeKey) {
+            const target = players.find(p => p.team !== myRole && p.isAlive);
+            if(!target) return;
+
+            db.ref('players').once('value', snap => {
+                snap.forEach(c => { 
+                    if(c.val().id === target.id) {
+                        c.ref.update({ isAlive: false }); 
+                    }
+                });
+            });
+            alert("NUŽUDYMAS PATVIRTINTAS!");
+        } else {
+            inputField.disabled = true;
+            killBtn.disabled = true;
+            inputField.value = '';
+            
+            let timeLeft = 15;
+            killBtn.style.background = "#555";
+            killBtn.innerText = `BLOKUOTA (${timeLeft}s)`;
+
+            const penaltyTimer = setInterval(() => {
+                timeLeft--;
+                if (timeLeft <= 0) {
+                    clearInterval(penaltyTimer);
+                    inputField.disabled = false;
+                    killBtn.disabled = false;
+                    killBtn.style.background = "#a00";
+                    killBtn.innerText = "PATVIRTINTI NUŽUDYMĄ";
+                } else {
+                    killBtn.innerText = `BLOKUOTA (${timeLeft}s)`;
+                }
+            }, 1000);
+        }
+    }
+
+    function renderGMDashboard() {
+        if (myRole !== 'GM') return;
+        document.getElementById('gm-player-list').innerHTML = players.map(p => `
+            <div class="player-card" style="opacity: ${p.isAlive ? 1 : 0.4}; border-left-color:${p.team==='RAUDONA'?'var(--red)':'var(--blue)'}">
+                <img src="${p.photo}" style="width:50px; height:50px;">
+                <div style="flex:1">
+                    <b style="text-decoration: ${p.isAlive ? 'none' : 'line-through'}">${p.name}</b>
+                    <div class="gm-status">
+                        ${p.isAlive ? '<span style="color:var(--green)">GYVAS</span>' : '<span style="color:var(--red)">NUKAUTAS</span>'} | 
+                        ID: <b>${p.id}</b> | KODAS: <b>${p.key}</b>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+</script>
+</body>
+</html>
