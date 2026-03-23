@@ -141,16 +141,15 @@
     });
     if(fi) fi.onchange = (e) => { if (e.target.files.length) processFile(e.target.files[0]); };
 
-    // Generuoja unikalų DVIŽENKLĮ skaičių (10-99), kurio dar neturi joks žaidėjas
     function getUniqueNumber(field) {
         let num;
         let isDuplicate;
         let attempts = 0;
         do {
-            num = Math.floor(Math.random() * 90 + 10); // Generuoja nuo 10 iki 99
+            num = Math.floor(Math.random() * 90 + 10);
             isDuplicate = players.some(p => p[field] === num);
             attempts++;
-            if(attempts > 200) break; // Apsauga nuo amžino ciklo
+            if(attempts > 200) break;
         } while (isDuplicate);
         return num;
     }
@@ -185,7 +184,8 @@
                     id: getUniqueNumber('id'),
                     key: getUniqueNumber('key'),
                     team: '', 
-                    isAlive: true
+                    isAlive: true,
+                    kills: 0
                 });
                 
                 document.getElementById('nameInput').value = '';
@@ -240,13 +240,13 @@
     window.newRound = function() {
         if (!confirm("Ar tikrai norite pradėti NAUJĄ RAUNDĄ? Visiems žaidėjams bus sukurti nauji ID ir Kodai, o laikas prasidės iš naujo.")) return;
         
-        // Išvalome senus ID/kodus, kad atlaisvintume vietą dviženkliams skaičiams
         players.forEach(p => { p.id = null; p.key = null; });
 
         players.forEach(p => {
             p.id = getUniqueNumber('id');
             p.key = getUniqueNumber('key');
             p.isAlive = true;
+            p.kills = 0;
         });
         
         for (let i = players.length - 1; i > 0; i--) {
@@ -393,8 +393,12 @@
 
             db.ref('players').once('value', snap => {
                 snap.forEach(c => { 
-                    if(c.val().id === target.id) {
+                    const val = c.val();
+                    if(val.id === target.id) {
                         c.ref.update({ isAlive: false }); 
+                    }
+                    if(val.id === validHunter.id) {
+                        c.ref.update({ kills: (val.kills || 0) + 1 });
                     }
                 });
             });
@@ -464,7 +468,8 @@
                         <b style="text-decoration: ${p.isAlive ? 'none' : 'line-through'}">${p.name}</b>
                         <div class="gm-status">
                             ${p.isAlive ? '<span style="color:var(--green)">GYVAS</span>' : '<span style="color:var(--red)">NUKAUTAS</span>'}<br>
-                            ID:<b>${p.id}</b><br>KODAS:<b>${p.key}</b>
+                            ID:<b>${p.id}</b> | KODAS:<b>${p.key}</b><br>
+                            TAŠKAI: <b style="color:var(--gold)">${p.kills || 0}</b>
                         </div>
                     </div>
                 </div>
