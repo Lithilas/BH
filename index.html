@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Airsoft Control Center</title>
+    <title>Lithilas Bounty Hunter zaidimas</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <style>
@@ -44,27 +44,27 @@
 <body>
 <div class="container">
     <div id="screen-enlist">
-        <h2 style="color:var(--gold)">1. ENLIST PLAYERS</h2>
+        <h2 style="color:var(--gold)">PRIDĖTI ŽAIDĖJUS</h2>
         <input type="text" id="nameInput" placeholder="TYPE NAME FIRST..." style="width: 100%; padding: 15px; box-sizing: border-box; background: #222; color: white; border: 1px solid #444; border-radius: 8px; font-size: 1.1rem;">
         
         <div id="drop-zone">
-            <b style="font-size: 1.2rem;">DRAG PHOTO HERE</b><br>
-            <small>OR CLICK TO SELECT</small>
+            <b style="font-size: 1.2rem;">Itempti foto</b><br>
+            <small>ARBA PASIRINKTI NAUJA FOTO</small>
         </div>
         <input type="file" id="fileInput" class="hidden" accept="image/*">
         
         <div id="playerList"></div>
-        <button class="action-btn" onclick="navToAssign()">NEXT: ASSIGN TEAMS</button>
+        <button class="action-btn" onclick="navToAssign()">PRISKIRTI KOMANDAI</button>
     </div>
 
     <div id="screen-assign" class="hidden">
-        <h2>2. ASSIGN TEAMS</h2>
+        <h2>>PRISKIRTI KOMANDAI</h2>
         <div id="assignList"></div>
-        <button class="action-btn" style="background:var(--green)" onclick="startFullGame()">START GAME (SYNC ALL)</button>
+        <button class="action-btn" style="background:var(--green)" onclick="startFullGame()">PRADĖTI ŽAIDIMĄ</button>
     </div>
 
     <div id="screen-wait" class="hidden">
-        <h2 style="text-align: center; margin-top: 100px;">WAITING FOR GM TO START...</h2>
+        <h2 style="text-align: center; margin-top: 100px;">LAUKIAME STARTO</h2>
     </div>
 
     <div id="screen-game" class="hidden">
@@ -75,19 +75,18 @@
             <h1 id="targetName" style="margin:10px 0;">--</h1>
             <h2 style="color:var(--gold); margin:0;">ID: <span id="targetID">--</span></h2>
             <input type="number" id="keyInput" placeholder="--">
-            <button id="killBtn" onclick="checkKill()" class="action-btn" style="background:#a00; color:white;">CONFIRM KILL</button>
+            <button id="killBtn" onclick="checkKill()" class="action-btn" style="background:#a00; color:white;">PATVIRTINTI NUŽUDYMĄ</button>
         </div>
 
         <div id="gm-dashboard" class="hidden">
-            <h2 style="color:var(--gold)">LIVE PLAYERS STATUS</h2>
+            <h2 style="color:var(--gold)">GYVŲ ŽAIDĖJŲ SARAŠAS</h2>
             <div id="gm-player-list"></div>
-            <button class="action-btn" style="background:var(--red); color:white; margin-top:30px;" onclick="resetGame()">RESET GAME (START OVER)</button>
+            <button class="action-btn" style="background:var(--red); color:white; margin-top:30px;" onclick="resetGame()">PRADĖTI NAUJĄ ŽAIDIMĄ</button>
         </div>
     </div>
 </div>
 
 <script>
-    // --- 1. CONFIG ---
     const firebaseConfig = {
         apiKey: "AIzaSyB1aSPG4BKYghWw2KKq_Ri4oqRbDeh4t_8",
         authDomain: "lithilas-bh.firebaseapp.com",
@@ -313,9 +312,8 @@
                     }
                 });
             });
-            alert("KILL CONFIRMED!");
+            alert("NUŽUDYMAS PATVIRTINTAS!");
         } else {
-            // Neteisingas kodas - pradedam 15 sekundžių baudą
             inputField.disabled = true;
             killBtn.disabled = true;
             inputField.value = '';
@@ -331,7 +329,7 @@
                     inputField.disabled = false;
                     killBtn.disabled = false;
                     killBtn.style.background = "#a00";
-                    killBtn.innerText = "CONFIRM KILL";
+                    killBtn.innerText = "NUŽUDYMAS PATVIRTINTAS!";
                 } else {
                     killBtn.innerText = `BLOKUOTA (${timeLeft}s)`;
                 }
