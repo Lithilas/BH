@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lithilas Bounty Hunter</title>
+    <title>Lithilas Bounty Hunter zaidimas</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <style>
@@ -12,85 +12,102 @@
         .container { max-width: 500px; margin: auto; }
         .hidden { display: none !important; }
         
-        #drop-zone { border: 3px dashed #444; padding: 40px; text-align: center; border-radius: 12px; background: #151515; cursor: pointer; margin: 15px 0; transition: 0.3s; }
+        /* Step 1: Enlist */
+        #drop-zone { 
+            border: 3px dashed #444; padding: 40px; text-align: center; border-radius: 12px; 
+            background: #151515; cursor: pointer; margin: 15px 0; transition: 0.3s;
+        }
         #drop-zone.dragover { border-color: var(--gold); background: #222; }
-        
-        .player-card { background: #1a1a1a; margin: 10px 0; padding: 12px; border-radius: 8px; display: flex; align-items: center; gap: 12px; border-left: 6px solid #444; }
+        .player-card { 
+            background: #1a1a1a; margin: 10px 0; padding: 12px; border-radius: 8px; 
+            display: flex; align-items: center; gap: 12px; border-left: 6px solid #444;
+        }
         .player-card img { width: 60px; height: 60px; border-radius: 4px; object-fit: cover; background: #000; flex-shrink: 0; }
         
+        /* Buttons */
         .action-btn { background: var(--gold); color: black; padding: 18px; border: none; font-weight: bold; width: 100%; cursor: pointer; border-radius: 8px; font-size: 1.1rem; margin-top: 10px; transition: 0.3s; }
+        .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .team-btn { padding: 12px; border: none; color: white; opacity: 0.2; cursor: pointer; font-weight: bold; flex: 1; border-radius: 4px; }
         .team-btn.active { opacity: 1; outline: 2px solid white; transform: scale(1.05); }
         
+        /* Game UI */
         #timer { font-size: 4rem; text-align: center; color: var(--gold); font-family: monospace; font-weight: bold; margin: 15px 0; }
         .target-frame { border: 4px solid var(--gold); padding: 15px; text-align: center; background: #000; border-radius: 12px; }
         .target-img { width: 160px; height: 160px; object-fit: cover; border: 2px solid #333; border-radius: 12px; margin: 0 auto; display: block; }
         
-        input[type="number"], input[type="tel"], input[type="text"] { font-size: 1.1rem; padding: 15px; background: #222; color: white; border: 1px solid #444; border-radius: 8px; box-sizing: border-box; width: 100%; }
-        #keyInput, #killerCodeInput { font-size: 2.5rem; width: 150px; text-align: center; background: #111; color: #0f0; border: 2px solid #0f0; margin: 15px 0; }
-
-        .result-card { background: #1a1a1a; padding: 10px; border-radius: 8px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; border-right: 4px solid var(--gold); }
-        .result-card img { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; }
-
+        input[type="number"], input[type="tel"] { font-size: 2.5rem; width: 150px; text-align: center; background: #111; color: #0f0; border: 2px solid #0f0; border-radius: 8px; margin: 15px 0; transition: 0.3s; padding: 5px; }
+        input::placeholder { color: #0f0; opacity: 0.5; font-size: 1.2rem; }
+        input:disabled { background: #333; border-color: #555; color: #555; }
+        
+        /* GM Dashboard Compact View */
         #gm-player-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 15px; }
-        .gm-card { background: #1a1a1a; padding: 8px; border-radius: 6px; display: flex; flex-direction: column; gap: 8px; border-left: 4px solid #444; font-size: 0.85rem; }
+        .gm-card { 
+            background: #1a1a1a; padding: 8px; border-radius: 6px; 
+            display: flex; flex-direction: column; gap: 8px; border-left: 4px solid #444;
+            font-size: 0.85rem; overflow: hidden;
+        }
+        .gm-card-top { display: flex; align-items: center; gap: 8px; }
+        .gm-card img { width: 40px; height: 40px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
+        .gm-card-info { display: flex; flex-direction: column; overflow: hidden; flex: 1; }
+        .gm-card-info b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.9rem; }
+        .gm-status { font-size: 0.75rem; color: #aaa; margin-top: 2px; line-height: 1.3; }
+        .gm-actions { display: flex; gap: 5px; width: 100%; }
+        .gm-btn { flex: 1; border: none; padding: 6px; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: bold; }
     </style>
 </head>
 <body>
-
 <div class="container">
     <div id="screen-enlist">
         <h2 style="color:var(--gold)">PRIDĖTI ŽAIDĖJUS</h2>
-        <input type="text" id="nameInput" placeholder="ĮRAŠYTI NICK'Ą">
-        <div id="drop-zone"><b>Įtempti foto</b><br><small>ARBA PASIRINKTI NAUJĄ FOTO</small></div>
+        <input type="text" id="nameInput" placeholder="ĮRAŠYTI NICK'Ą" style="width: 100%; padding: 15px; box-sizing: border-box; background: #222; color: white; border: 1px solid #444; border-radius: 8px; font-size: 1.1rem; margin-bottom: 15px;">
+        
+        <div id="drop-zone">
+            <b style="font-size: 1.2rem;">Įtempti foto</b><br>
+            <small>ARBA PASIRINKTI NAUJĄ FOTO</small>
+        </div>
         <input type="file" id="fileInput" class="hidden" accept="image/*">
+        
         <div id="playerList"></div>
         <button class="action-btn" onclick="navToAssign()">PRISKIRTI KOMANDAI</button>
     </div>
 
     <div id="screen-assign" class="hidden">
-        <h2>KONFIGŪRACIJA</h2>
-        <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #333;">
-            <label style="color: var(--gold); display: block; margin-bottom: 5px; font-weight: bold;">ŽAIDIMO TRUKMĖ (MINUTĖS):</label>
-            <input type="number" id="gameDurationInput" value="60" min="1">
-        </div>
+        <h2>PRISKIRTI KOMANDAI</h2>
         <div id="assignList"></div>
         <button class="action-btn" style="background:var(--green)" onclick="startFullGame()">PRADĖTI ŽAIDIMĄ</button>
     </div>
 
     <div id="screen-wait" class="hidden">
-        <h2 style="text-align: center; margin-top: 100px;">LAUKIAME STARTO...</h2>
+        <h2 style="text-align: center; margin-top: 100px;">LAUKIAME STARTO</h2>
     </div>
 
     <div id="screen-game" class="hidden">
         <div id="timer">60:00</div>
-        <div id="player-score"></div>
-        <div id="hunt-ui" class="target-frame"></div>
-        <div id="gm-dashboard" class="hidden">
-            <h2 style="color:var(--gold); text-align:center;">VALDYMAS</h2>
-            <div id="gm-player-list"></div>
-            <button class="action-btn" style="background:var(--blue); color:white; margin-top:30px;" onclick="newRound()">NAUJAS RAUNDAS</button>
-            <button class="action-btn" style="background:var(--red); color:white;" onclick="resetGame()">VISKĄ IŠTRINTI</button>
-        </div>
-    </div>
+        
+        <div id="player-score" style="margin-bottom: 15px;"></div>
 
-    <div id="screen-results" class="hidden">
-        <h1 style="text-align: center; color: var(--gold);">BAIGTA</h1>
-        <h3 style="color: var(--red); border-bottom: 2px solid var(--red);">RAUDONA KOMANDA</h3>
-        <div id="results-red"></div>
-        <h3 style="color: var(--blue); border-bottom: 2px solid var(--blue); margin-top: 20px;">MĖLYNA KOMANDA</h3>
-        <div id="results-blue"></div>
-        <button id="gm-reset-after" class="action-btn hidden" style="margin-top: 30px;" onclick="resetGame()">NAUJAS ŽAIDIMAS</button>
+        <div id="hunt-ui" class="target-frame">
+            </div>
+
+        <div id="gm-dashboard" class="hidden">
+            <h2 style="color:var(--gold); text-align:center; margin-bottom:5px;">GYVŲ ŽAIDĖJŲ SĄRAŠAS</h2>
+            <div id="gm-score"></div>
+            <div id="gm-player-list"></div>
+            
+            <button class="action-btn" style="background:var(--blue); color:white; margin-top:30px;" onclick="newRound()">NAUJAS RAUNDAS (TIE PATYS ŽAIDĖJAI)</button>
+            <button class="action-btn" style="background:var(--red); color:white; margin-top:10px;" onclick="resetGame()">VISKĄ IŠTRINTI</button>
+        </div>
     </div>
 </div>
 
-<div id="killer-modal" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); display:flex; align-items:center; justify-content:center; z-index:9999;">
-    <div style="background:#151515; padding:25px; border-radius:12px; border:2px solid var(--gold); text-align:center; width:90%; max-width:400px;">
-        <h3 style="color:var(--gold);">PATVIRTINK SAVO KODĄ</h3>
-        <input type="tel" id="killerCodeInput" placeholder="TAVO KODAS">
+<div id="killer-modal" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); display:flex; align-items:center; justify-content:center; z-index:9999;">
+    <div style="background:#151515; padding:25px; border-radius:12px; border:2px solid var(--gold); text-align:center; width:90%; max-width:400px; box-sizing:border-box;">
+        <h3 style="color:var(--gold); margin-top:0;">TAIKINYS NUKAUTAS!</h3>
+        <p style="font-size:1rem; margin-bottom:15px;">Įveskite SAVO žaidėjo kodą, kad gautumėte tašką:</p>
+        <input type="tel" inputmode="numeric" pattern="[0-9]*" id="killerCodeInput" placeholder="TAVO KODAS" style="width:100%; margin:10px 0 20px 0;">
         <div style="display:flex; gap:10px;">
-            <button class="action-btn" style="background:#555; color:white;" onclick="closeKillerModal()">ATŠAUKTI</button>
-            <button class="action-btn" style="background:var(--green); color:white;" onclick="confirmKillerCode()">GERAI</button>
+            <button class="action-btn" style="background:#555; color:white; margin:0;" onclick="closeKillerModal()">ATŠAUKTI</button>
+            <button class="action-btn" style="background:var(--green); color:white; margin:0;" onclick="confirmKillerCode()">PATVIRTINTI</button>
         </div>
     </div>
 </div>
@@ -103,7 +120,8 @@
         projectId: "lithilas-bh",
         storageBucket: "lithilas-bh.firebasestorage.app",
         messagingSenderId: "971183564853",
-        appId: "1:971183564853:web:2772ee6826ba1fa54d297c"
+        appId: "1:971183564853:web:2772ee6826ba1fa54d297c",
+        measurementId: "G-Y6FSWJD169"
     };
 
     firebase.initializeApp(firebaseConfig);
@@ -112,56 +130,91 @@
     let myRole = new URLSearchParams(window.location.search).get('role') || 'GM';
     let timerInterval;
 
+    window.onload = () => {
+        if (myRole !== 'GM') {
+            document.getElementById('screen-enlist').classList.add('hidden');
+            document.getElementById('screen-wait').classList.remove('hidden');
+        }
+    };
+
     const dz = document.getElementById('drop-zone');
     const fi = document.getElementById('fileInput');
 
-    if (dz) {
-        dz.onclick = () => fi.click();
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => {
-            dz.addEventListener(e, (ev) => { ev.preventDefault(); ev.stopPropagation(); });
-        });
-        dz.addEventListener('dragover', () => dz.classList.add('dragover'));
-        dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
-        dz.addEventListener('drop', (e) => {
-            dz.classList.remove('dragover');
-            if (e.dataTransfer.files.length) processFile(e.dataTransfer.files[0]);
-        });
+    if(dz) dz.onclick = () => fi.click();
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => {
+        if(dz) dz.addEventListener(e, (ev) => { ev.preventDefault(); ev.stopPropagation(); });
+    });
+    if(dz) dz.addEventListener('dragover', () => dz.classList.add('dragover'));
+    if(dz) dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+
+    if(dz) dz.addEventListener('drop', (e) => {
+        dz.classList.remove('dragover');
+        if (e.dataTransfer.files.length) processFile(e.dataTransfer.files[0]);
+    });
+    if(fi) fi.onchange = (e) => { if (e.target.files.length) processFile(e.target.files[0]); };
+
+    function getUniqueNumber(field) {
+        let num;
+        let isDuplicate;
+        let attempts = 0;
+        do {
+            num = Math.floor(Math.random() * 90 + 10);
+            isDuplicate = players.some(p => p[field] === num);
+            attempts++;
+            if(attempts > 200) break;
+        } while (isDuplicate);
+        return num;
     }
-    if (fi) fi.onchange = (e) => { if (e.target.files.length) processFile(e.target.files[0]); };
 
     function processFile(file) {
-        const nameInput = document.getElementById('nameInput');
-        const nameVal = nameInput.value.trim();
-        if (!nameVal) return alert("Pirma įrašykite vardą!");
+        const nameVal = document.getElementById('nameInput').value.trim();
         
+        if (!nameVal) {
+            document.getElementById('fileInput').value = ''; 
+            return alert("Prašome pirma įvesti vardą!");
+        }
+
         const reader = new FileReader();
         reader.readAsDataURL(file);
-        reader.onload = (e) => {
+        reader.onload = (event) => {
             const img = new Image();
-            img.src = e.target.result;
+            img.src = event.target.result;
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                const scale = 400 / img.width;
-                canvas.width = 400; canvas.height = img.height * scale;
-                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                const MAX_WIDTH = 500;
+                const scale = MAX_WIDTH / img.width;
+                canvas.width = MAX_WIDTH;
+                canvas.height = img.height * scale;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                
+                const compressedData = canvas.toDataURL('image/jpeg', 0.6);
+
                 players.push({
-                    name: nameVal, photo: canvas.toDataURL('image/jpeg', 0.6),
-                    id: Math.floor(Math.random()*90+10), key: Math.floor(Math.random()*90+10),
-                    team: '', isAlive: true, kills: 0
+                    name: nameVal,
+                    photo: compressedData,
+                    id: getUniqueNumber('id'),
+                    key: getUniqueNumber('key'),
+                    team: '', 
+                    isAlive: true,
+                    kills: 0
                 });
                 
-                nameInput.value = ''; // Štai čia išvalomas laukas
+                document.getElementById('nameInput').value = '';
+                document.getElementById('fileInput').value = ''; 
                 renderEnlist();
             };
         };
     }
 
     function renderEnlist() {
-        document.getElementById('playerList').innerHTML = players.map(p => `<div class="player-card"><img src="${p.photo}"><b>${p.name}</b></div>`).join('');
+        document.getElementById('playerList').innerHTML = players.map(p => `
+            <div class="player-card"><img src="${p.photo}"><b>${p.name}</b></div>
+        `).join('');
     }
 
     function navToAssign() {
-        if (!players.length) return alert("Pridėkite žaidėjų!");
+        if (players.length === 0) return alert("Pirma pridėkite žaidėjų!");
         document.getElementById('screen-enlist').classList.add('hidden');
         document.getElementById('screen-assign').classList.remove('hidden');
         renderAssign();
@@ -171,125 +224,286 @@
         document.getElementById('assignList').innerHTML = players.map((p, i) => `
             <div class="player-card" style="border-left-color:${p.team==='RAUDONA'?'var(--red)':p.team==='MELYNA'?'var(--blue)':'#444'}">
                 <img src="${p.photo}"><b style="flex:1">${p.name}</b>
-                <button class="team-btn ${p.team==='RAUDONA'?'active':''}" style="background:var(--red)" onclick="setTeam(${i},'RAUDONA')">RED</button>
-                <button class="team-btn ${p.team==='MELYNA'?'active':''}" style="background:var(--blue)" onclick="setTeam(${i},'MELYNA')">BLUE</button>
+                <div style="display:flex; gap:5px;">
+                    <button class="team-btn ${p.team==='RAUDONA'?'active':''}" style="background:var(--red)" onclick="setTeam(${i},'RAUDONA')">RED</button>
+                    <button class="team-btn ${p.team==='MELYNA'?'active':''}" style="background:var(--blue)" onclick="setTeam(${i},'MELYNA')">BLUE</button>
+                </div>
             </div>
         `).join('');
     }
 
-    window.setTeam = (idx, t) => { players[idx].team = t; renderAssign(); };
+    window.setTeam = function(idx, teamName) {
+        players[idx].team = teamName;
+        renderAssign();
+    };
 
     function startFullGame() {
-        if (players.some(p => !p.team)) return alert("Visiems priskirkite komandas!");
-        const mins = parseInt(document.getElementById('gameDurationInput').value) || 60;
+        if (players.some(p => !p.team)) return alert("Priskirkite visus žaidėjus komandoms!");
+        
+        for (let i = players.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [players[i], players[j]] = [players[j], players[i]];
+        }
+
         db.ref('players').set(players);
-        db.ref('gameStatus').set({ started: true, finished: false, startTime: Date.now(), duration: mins * 60 });
+        db.ref('gameStatus').set({ started: true, startTime: Date.now() });
+    }
+
+    window.newRound = function() {
+        if (!confirm("Ar tikrai norite pradėti NAUJĄ RAUNDĄ? Visiems žaidėjams bus sukurti nauji ID ir Kodai, o laikas prasidės iš naujo.")) return;
+        
+        players.forEach(p => { p.id = null; p.key = null; });
+
+        players.forEach(p => {
+            p.id = getUniqueNumber('id');
+            p.key = getUniqueNumber('key');
+            p.isAlive = true;
+            p.kills = 0;
+        });
+        
+        for (let i = players.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [players[i], players[j]] = [players[j], players[i]];
+        }
+
+        db.ref('players').set(players);
+        db.ref('gameStatus').update({ startTime: Date.now() }); 
+    }
+
+    window.resetGame = function() {
+        if (!confirm("Ar tikrai norite IŠTRINTI visus duomenis? Žaidėjus teks suvedinėti iš naujo.")) return;
+        
+        db.ref('players').remove();
+        db.ref('gameStatus').set({ started: false });
+        
+        players = [];
+        document.getElementById('playerList').innerHTML = '';
+        document.getElementById('assignList').innerHTML = '';
     }
 
     db.ref('gameStatus').on('value', snap => {
-        const s = snap.val();
+        const status = snap.val();
+        
         document.querySelectorAll('.container > div').forEach(d => d.classList.add('hidden'));
-        if (s?.finished) showResults();
-        else if (s?.started) {
+
+        if (status && status.started) {
             document.getElementById('screen-game').classList.remove('hidden');
-            if (myRole === 'GM') document.getElementById('gm-dashboard').classList.remove('hidden');
-            else document.getElementById('hunt-ui').classList.remove('hidden');
-            startTimer(s.startTime, s.duration);
+            
+            if (myRole === 'GM') {
+                document.getElementById('hunt-ui').classList.add('hidden');
+                document.getElementById('player-score').classList.add('hidden');
+                document.getElementById('gm-dashboard').classList.remove('hidden');
+                renderGMDashboard();
+            } else {
+                document.getElementById('hunt-ui').classList.remove('hidden');
+                document.getElementById('player-score').classList.remove('hidden');
+            }
+            startTimer(status.startTime);
         } else {
             clearInterval(timerInterval);
-            document.getElementById(myRole === 'GM' ? 'screen-enlist' : 'screen-wait').classList.remove('hidden');
+            if (myRole === 'GM') {
+                document.getElementById('screen-enlist').classList.remove('hidden');
+            } else {
+                document.getElementById('screen-wait').classList.remove('hidden');
+            }
         }
     });
 
     db.ref('players').on('value', snap => {
-        players = snap.exists() ? Object.values(snap.val()) : [];
-        if (!document.getElementById('screen-results').classList.contains('hidden')) showResults();
-        else { myRole === 'GM' ? renderGMDashboard() : (updateTarget(), renderPlayerScore()); }
+        if (snap.exists()) {
+            players = Object.values(snap.val());
+        } else {
+            players = []; 
+        }
+        
+        if (myRole !== 'GM') {
+            updateTarget();
+            renderPlayerScore();
+        } else {
+            renderGMDashboard();
+        }
     });
 
-    function startTimer(start, dur) {
+    function startTimer(startTime) {
         clearInterval(timerInterval);
         timerInterval = setInterval(() => {
-            const rem = dur - Math.floor((Date.now() - start) / 1000);
-            if (rem <= 0) { 
-                clearInterval(timerInterval); 
-                if (myRole === 'GM') db.ref('gameStatus/finished').set(true);
-                return;
+            const rem = 3600 - Math.floor((Date.now() - startTime) / 1000);
+            if (rem <= 0) {
+                clearInterval(timerInterval);
+                return document.getElementById('timer').innerText = "00:00";
             }
-            const m = Math.floor(rem/60), sec = rem%60;
-            document.getElementById('timer').innerText = `${m}:${sec < 10 ? '0'+sec : sec}`;
+            const m = Math.floor(rem / 60), s = rem % 60;
+            document.getElementById('timer').innerText = `${m}:${s < 10 ? '0'+s : s}`;
         }, 1000);
     }
 
-    function showResults() {
-        document.querySelectorAll('.container > div').forEach(d => d.classList.add('hidden'));
-        document.getElementById('screen-results').classList.remove('hidden');
-        if (myRole === 'GM') document.getElementById('gm-reset-after').classList.remove('hidden');
-        
-        const sorted = [...players].sort((a, b) => (b.kills || 0) - (a.kills || 0));
-        const list = (t) => sorted.filter(p => p.team === t && (p.kills || 0) > 0).map(p => `
-            <div class="result-card">
-                <div style="display:flex; align-items:center; gap:10px;"><img src="${p.photo}"><b>${p.name}</b></div>
-                <b style="color:var(--gold)">${p.kills} PK</b>
-            </div>
-        `).join('') || '<p style="text-align:center; opacity:0.5;">Nėra nužudymų</p>';
-
-        document.getElementById('results-red').innerHTML = list('RAUDONA');
-        document.getElementById('results-blue').innerHTML = list('MELYNA');
-    }
-
     function updateTarget() {
+        if (players.length === 0) return;
+
         const target = players.find(p => p.team !== myRole && p.isAlive);
-        const ui = document.getElementById('hunt-ui');
-        if (!target) return ui.innerHTML = "<h1 style='color:var(--green)'>PERGALĖ!</h1>";
-        ui.innerHTML = `<img class="target-img" src="${target.photo}"><h1>${target.name}</h1><h2 style="color:var(--gold)">ID: ${target.id}</h2><input type="tel" id="keyInput" placeholder="KODAS"><button onclick="checkKill()" class="action-btn" style="background:#a00; color:white;">PATVIRTINTI</button>`;
+        if (!target) {
+            document.getElementById('hunt-ui').innerHTML = "<h1 style='color:var(--green); text-align:center;'>MISIJA ĮVYKDYTA</h1>";
+            window.activeKey = null;
+            return;
+        }
+        
+        if (!document.getElementById('targetImg')) {
+            document.getElementById('hunt-ui').innerHTML = `
+                <img id="targetImg" class="target-img" src="${target.photo}">
+                <h1 id="targetName" style="margin:10px 0;">${target.name}</h1>
+                <h2 style="color:var(--gold); margin:0;">ID: <span id="targetID">${target.id}</span></h2>
+                
+                <input type="tel" inputmode="numeric" pattern="[0-9]*" id="keyInput" placeholder="--">
+                
+                <button id="killBtn" onclick="checkKill()" class="action-btn" style="background:#a00; color:white;">PATVIRTINTI NUŽUDYMĄ</button>
+            `;
+        } else {
+            document.getElementById('targetImg').src = target.photo;
+            document.getElementById('targetName').innerText = target.name;
+            document.getElementById('targetID').innerText = target.id;
+        }
+        
         window.activeKey = target.key;
-        window.activeTargetId = target.id;
+        if(document.getElementById('keyInput')) document.getElementById('keyInput').value = ''; 
     }
-
-    window.checkKill = () => {
-        if (parseInt(document.getElementById('keyInput').value) === window.activeKey) document.getElementById('killer-modal').classList.remove('hidden');
-        else alert("Klaidingas kodas!");
-    };
-
-    window.confirmKillerCode = () => {
-        const code = parseInt(document.getElementById('killerCodeInput').value);
-        const hunter = players.find(p => p.team === myRole && p.isAlive && p.key === code);
-        if (hunter) {
-            db.ref('players').once('value', snap => {
-                snap.forEach(c => {
-                    if(c.val().id === window.activeTargetId) c.ref.update({ isAlive: false });
-                    if(c.val().id === hunter.id) c.ref.update({ kills: (c.val().kills || 0) + 1 });
-                });
-            });
-            closeKillerModal();
-        } else alert("Neteisingas tavo kodas!");
-    };
-
-    window.closeKillerModal = () => document.getElementById('killer-modal').classList.add('hidden');
 
     function renderPlayerScore() {
-        const r = players.filter(p => p.team === 'RAUDONA' && p.isAlive).length;
-        const b = players.filter(p => p.team === 'MELYNA' && p.isAlive).length;
-        document.getElementById('player-score').innerHTML = `<div style="display:flex; justify-content:space-between; padding:10px; font-weight:bold;"><span style="color:var(--red)">RAUDONA: ${r}</span><span style="color:var(--blue)">MĖLYNA: ${b}</span></div>`;
+        if (myRole === 'GM') return; 
+
+        const aliveRed = players.filter(p => p.team === 'RAUDONA' && p.isAlive).length;
+        const aliveBlue = players.filter(p => p.team === 'MELYNA' && p.isAlive).length;
+
+        document.getElementById('player-score').innerHTML = `
+            <div style="display:flex; justify-content:space-between; background:#111; padding:12px; border-radius:8px; border:1px solid #333;">
+                <span style="color:var(--red); font-size:1.1rem; font-weight:bold;">RAUDONI: ${aliveRed}</span>
+                <span style="color:var(--blue); font-size:1.1rem; font-weight:bold;">MĖLYNI: ${aliveBlue}</span>
+            </div>
+        `;
+    }
+
+    // Modalų valdymas
+    window.closeKillerModal = function() {
+        document.getElementById('killer-modal').classList.add('hidden');
+    }
+
+    window.checkKill = function() {
+        if (!window.activeKey) return alert("TAIKINYS NERASTAS!");
+        
+        const inputField = document.getElementById('keyInput');
+        const killBtn = document.getElementById('killBtn');
+        const input = parseInt(inputField.value);
+
+        if (!input) return alert("Būtina įvesti taikinio kodą!");
+
+        if (input === window.activeKey) {
+            // Atidarome pasirinktinį langą, kuriame bus skaičių klaviatūra
+            document.getElementById('killerCodeInput').value = '';
+            document.getElementById('killer-modal').classList.remove('hidden');
+        } else {
+            inputField.disabled = true;
+            killBtn.disabled = true;
+            inputField.value = '';
+            
+            let timeLeft = 15;
+            killBtn.style.background = "#555";
+            killBtn.innerText = `BLOKUOTA (${timeLeft}s)`;
+
+            const penaltyTimer = setInterval(() => {
+                timeLeft--;
+                if (timeLeft <= 0) {
+                    clearInterval(penaltyTimer);
+                    inputField.disabled = false;
+                    killBtn.disabled = false;
+                    killBtn.style.background = "#a00";
+                    killBtn.innerText = "PATVIRTINTI NUŽUDYMĄ";
+                } else {
+                    killBtn.innerText = `BLOKUOTA (${timeLeft}s)`;
+                }
+            }, 1000);
+        }
+    }
+
+    // Funkcija, kuri paleidžiama patvirtinus savo kodą modale
+    window.confirmKillerCode = function() {
+        const hunterCodeStr = document.getElementById('killerCodeInput').value;
+        if (!hunterCodeStr) return alert("Būtina įvesti savo kodą!");
+        
+        const hunterCodeVal = parseInt(hunterCodeStr);
+        const validHunter = players.find(p => p.team === myRole && p.isAlive && p.key === hunterCodeVal);
+
+        if (validHunter) {
+            const target = players.find(p => p.team !== myRole && p.isAlive);
+            if(!target) return;
+
+            db.ref('players').once('value', snap => {
+                snap.forEach(c => { 
+                    const val = c.val();
+                    if(val.id === target.id) {
+                        c.ref.update({ isAlive: false }); 
+                    }
+                    if(val.id === validHunter.id) {
+                        c.ref.update({ kills: (val.kills || 0) + 1 });
+                    }
+                });
+            });
+            alert("NUŽUDYMAS PATVIRTINTAS! Taškas skirtas žaidėjui: " + validHunter.name);
+            closeKillerModal();
+        } else {
+            alert("KLAIDA: Neteisingas tavo kodas! Taškas neskirtas. Bandykite dar kartą.");
+            closeKillerModal();
+        }
+    }
+
+    window.gmSwapTeam = function(index) {
+        if (!players[index]) return;
+        players[index].team = players[index].team === 'RAUDONA' ? 'MELYNA' : 'RAUDONA';
+        db.ref('players').set(players);
+    }
+
+    window.gmDeletePlayer = function(index) {
+        if (!confirm(`Ar tikrai norite pašalinti žaidėją ${players[index].name}?`)) return;
+        players.splice(index, 1);
+        
+        if (players.length === 0) {
+            db.ref('players').remove(); 
+        } else {
+            db.ref('players').set(players);
+        }
     }
 
     function renderGMDashboard() {
-        document.getElementById('gm-player-list').innerHTML = players.map(p => `
-            <div class="gm-card" style="border-left-color:${p.team==='RAUDONA'?'var(--red)':'var(--blue)'}; opacity:${p.isAlive?1:0.4}">
-                <b>${p.name} ${p.isAlive ? '✅' : '💀'}</b>
-                ID: ${p.id} | KODAS: ${p.key}<br>KILLS: ${p.kills || 0}
+        if (myRole !== 'GM') return;
+        
+        const aliveRed = players.filter(p => p.team === 'RAUDONA' && p.isAlive).length;
+        const aliveBlue = players.filter(p => p.team === 'MELYNA' && p.isAlive).length;
+
+        document.getElementById('gm-score').innerHTML = `
+            <div style="display:flex; justify-content:space-between; background:#111; padding:12px; border-radius:8px; border:1px solid #333; margin-bottom: 10px;">
+                <span style="color:var(--red); font-size:1.1rem; font-weight:bold;">RAUDONI: ${aliveRed}</span>
+                <span style="color:var(--blue); font-size:1.1rem; font-weight:bold;">MĖLYNI: ${aliveBlue}</span>
+            </div>
+        `;
+
+        document.getElementById('gm-player-list').innerHTML = players.map((p, index) => `
+            <div class="gm-card" style="opacity: ${p.isAlive ? 1 : 0.4}; border-left-color:${p.team==='RAUDONA'?'var(--red)':'var(--blue)'}">
+                <div class="gm-card-top">
+                    <img src="${p.photo}">
+                    <div class="gm-card-info">
+                        <b style="text-decoration: ${p.isAlive ? 'none' : 'line-through'}">${p.name}</b>
+                        <div class="gm-status">
+                            ${p.isAlive ? '<span style="color:var(--green)">GYVAS</span>' : '<span style="color:var(--red)">NUKAUTAS</span>'}<br>
+                            ID:<b>${p.id}</b> | KODAS:<b>${p.key}</b><br>
+                            TAŠKAI: <b style="color:var(--gold)">${p.kills || 0}</b>
+                        </div>
+                    </div>
+                </div>
+                <div class="gm-actions">
+                    <button class="gm-btn" style="background:#444; color:white;" onclick="gmSwapTeam(${index})">KEISTI</button>
+                    <button class="gm-btn" style="background:var(--red); color:white;" onclick="gmDeletePlayer(${index})">ŠALINTI</button>
+                </div>
             </div>
         `).join('');
     }
-
-    window.resetGame = () => { if(confirm("Ištrinti viską?")) { db.ref().remove(); location.reload(); }};
-    window.newRound = () => {
-        const mins = parseInt(document.getElementById('gameDurationInput').value) || 60;
-        players.forEach(p => { p.isAlive = true; p.id = Math.floor(Math.random()*90+10); p.key = Math.floor(Math.random()*90+10); p.kills = 0; });
-        db.ref('players').set(players);
-        db.ref('gameStatus').set({ started: true, finished: false, startTime: Date.now(), duration: mins * 60 });
-    };
 </script>
 </body>
 </html>
