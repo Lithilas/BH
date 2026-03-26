@@ -12,24 +12,29 @@
         .container { max-width: 500px; margin: auto; }
         .hidden { display: none !important; }
         
-        #drop-zone { border: 3px dashed #444; padding: 40px; text-align: center; border-radius: 12px; background: #151515; cursor: pointer; margin: 15px 0; }
-        .player-card { background: #1a1a1a; margin: 10px 0; padding: 12px; border-radius: 8px; display: flex; align-items: center; gap: 12px; border-left: 6px solid #444; }
-        .player-card img { width: 60px; height: 60px; border-radius: 4px; object-fit: cover; background: #000; }
+        /* UI Elementai */
+        #drop-zone { border: 3px dashed #444; padding: 40px; text-align: center; border-radius: 12px; background: #151515; cursor: pointer; margin: 15px 0; transition: 0.3s; }
+        #drop-zone.dragover { border-color: var(--gold); background: #222; }
         
-        .action-btn { background: var(--gold); color: black; padding: 18px; border: none; font-weight: bold; width: 100%; cursor: pointer; border-radius: 8px; font-size: 1.1rem; margin-top: 10px; }
+        .player-card { background: #1a1a1a; margin: 10px 0; padding: 12px; border-radius: 8px; display: flex; align-items: center; gap: 12px; border-left: 6px solid #444; }
+        .player-card img { width: 60px; height: 60px; border-radius: 4px; object-fit: cover; background: #000; flex-shrink: 0; }
+        
+        .action-btn { background: var(--gold); color: black; padding: 18px; border: none; font-weight: bold; width: 100%; cursor: pointer; border-radius: 8px; font-size: 1.1rem; margin-top: 10px; transition: 0.3s; }
         .team-btn { padding: 12px; border: none; color: white; opacity: 0.2; cursor: pointer; font-weight: bold; flex: 1; border-radius: 4px; }
-        .team-btn.active { opacity: 1; outline: 2px solid white; }
+        .team-btn.active { opacity: 1; outline: 2px solid white; transform: scale(1.05); }
         
         #timer { font-size: 4rem; text-align: center; color: var(--gold); font-family: monospace; font-weight: bold; margin: 15px 0; }
         .target-frame { border: 4px solid var(--gold); padding: 15px; text-align: center; background: #000; border-radius: 12px; }
         .target-img { width: 160px; height: 160px; object-fit: cover; border: 2px solid #333; border-radius: 12px; margin: 0 auto; display: block; }
         
-        input[type="number"], input[type="tel"], input[type="text"] { font-size: 1.1rem; padding: 15px; background: #222; color: white; border: 1px solid #444; border-radius: 8px; box-sizing: border-box; }
+        input[type="number"], input[type="tel"], input[type="text"] { font-size: 1.1rem; padding: 15px; background: #222; color: white; border: 1px solid #444; border-radius: 8px; box-sizing: border-box; width: 100%; }
         #keyInput, #killerCodeInput { font-size: 2.5rem; width: 150px; text-align: center; background: #111; color: #0f0; border: 2px solid #0f0; margin: 15px 0; }
 
+        /* Rezultatai */
         .result-card { background: #1a1a1a; padding: 10px; border-radius: 8px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; border-right: 4px solid var(--gold); }
         .result-card img { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; }
-        
+
+        /* GM Dashboard */
         #gm-player-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 15px; }
         .gm-card { background: #1a1a1a; padding: 8px; border-radius: 6px; display: flex; flex-direction: column; gap: 8px; border-left: 4px solid #444; font-size: 0.85rem; }
     </style>
@@ -39,8 +44,8 @@
 <div class="container">
     <div id="screen-enlist">
         <h2 style="color:var(--gold)">PRIDĖTI ŽAIDĖJUS</h2>
-        <input type="text" id="nameInput" placeholder="ĮRAŠYTI NICK'Ą" style="width: 100%;">
-        <div id="drop-zone"><b>Įtempti foto</b><br><small>ARBA PASIRINKTI NAUJĄ FOTO</small></div>
+        <input type="text" id="nameInput" placeholder="ĮRAŠYTI NICK'Ą">
+        <div id="drop-zone" id="dz"><b>Įtempti foto</b><br><small>ARBA PASIRINKTI NAUJĄ FOTO</small></div>
         <input type="file" id="fileInput" class="hidden" accept="image/*">
         <div id="playerList"></div>
         <button class="action-btn" onclick="navToAssign()">PRISKIRTI KOMANDAI</button>
@@ -50,14 +55,14 @@
         <h2>KONFIGŪRACIJA</h2>
         <div style="background: #1a1a1a; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #333;">
             <label style="color: var(--gold); display: block; margin-bottom: 5px; font-weight: bold;">ŽAIDIMO TRUKMĖ (MINUTĖS):</label>
-            <input type="number" id="gameDurationInput" value="60" min="1" style="width: 100%; text-align: center; color: var(--gold);">
+            <input type="number" id="gameDurationInput" value="60" min="1">
         </div>
         <div id="assignList"></div>
         <button class="action-btn" style="background:var(--green)" onclick="startFullGame()">PRADĖTI ŽAIDIMĄ</button>
     </div>
 
     <div id="screen-wait" class="hidden">
-        <h2 style="text-align: center; margin-top: 100px;">LAUKIAME STARTO</h2>
+        <h2 style="text-align: center; margin-top: 100px;">LAUKIAME STARTO...</h2>
     </div>
 
     <div id="screen-game" class="hidden">
@@ -73,23 +78,18 @@
     </div>
 
     <div id="screen-results" class="hidden">
-        <h1 style="text-align: center; color: var(--gold); margin-bottom: 5px;">ŽAIDIMAS BAIGTAS</h1>
-        <p style="text-align: center; margin-bottom: 25px; opacity: 0.7;">GALUTINIAI REZULTATAI</p>
-        
+        <h1 style="text-align: center; color: var(--gold);">BAIGTA</h1>
         <h3 style="color: var(--red); border-bottom: 2px solid var(--red);">RAUDONA KOMANDA</h3>
         <div id="results-red"></div>
-        
-        <h3 style="color: var(--blue); border-bottom: 2px solid var(--blue); margin-top: 30px;">MĖLYNA KOMANDA</h3>
+        <h3 style="color: var(--blue); border-bottom: 2px solid var(--blue); margin-top: 20px;">MĖLYNA KOMANDA</h3>
         <div id="results-blue"></div>
-
-        <button id="gm-reset-after" class="action-btn hidden" style="margin-top: 40px;" onclick="resetGame()">PRADĖTI IŠ NAUJO (GM)</button>
+        <button id="gm-reset-after" class="action-btn hidden" style="margin-top: 30px;" onclick="resetGame()">NAUJAS ŽAIDIMAS</button>
     </div>
 </div>
 
-<div id="killer-modal" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); display:flex; align-items:center; justify-content:center; z-index:9999;">
+<div id="killer-modal" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); display:flex; align-items:center; justify-content:center; z-index:9999;">
     <div style="background:#151515; padding:25px; border-radius:12px; border:2px solid var(--gold); text-align:center; width:90%; max-width:400px;">
-        <h3 style="color:var(--gold);">TAIKINYS NUKAUTAS!</h3>
-        <p>Įveskite SAVO žaidėjo kodą:</p>
+        <h3 style="color:var(--gold);">PATVIRTINK SAVO KODĄ</h3>
         <input type="tel" id="killerCodeInput" placeholder="TAVO KODAS">
         <div style="display:flex; gap:10px;">
             <button class="action-btn" style="background:#555; color:white;" onclick="closeKillerModal()">ATŠAUKTI</button>
@@ -115,10 +115,23 @@
     let myRole = new URLSearchParams(window.location.search).get('role') || 'GM';
     let timerInterval;
 
+    // --- Nuotraukos įkėlimas ---
     const dz = document.getElementById('drop-zone');
     const fi = document.getElementById('fileInput');
-    if(dz) dz.onclick = () => fi.click();
-    if(fi) fi.onchange = (e) => { if (e.target.files.length) processFile(e.target.files[0]); };
+
+    if (dz) {
+        dz.onclick = () => fi.click();
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => {
+            dz.addEventListener(e, (ev) => { ev.preventDefault(); ev.stopPropagation(); });
+        });
+        dz.addEventListener('dragover', () => dz.classList.add('dragover'));
+        dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+        dz.addEventListener('drop', (e) => {
+            dz.classList.remove('dragover');
+            if (e.dataTransfer.files.length) processFile(e.dataTransfer.files[0]);
+        });
+    }
+    if (fi) fi.onchange = (e) => { if (e.target.files.length) processFile(e.target.files[0]); };
 
     function processFile(file) {
         const nameVal = document.getElementById('nameInput').value.trim();
@@ -167,23 +180,21 @@
     window.setTeam = (idx, t) => { players[idx].team = t; renderAssign(); };
 
     function startFullGame() {
-        if (players.some(p => !p.team)) return alert("Priskirkite visas komandas!");
+        if (players.some(p => !p.team)) return alert("Visiems priskirkite komandas!");
         const mins = parseInt(document.getElementById('gameDurationInput').value) || 60;
         db.ref('players').set(players);
         db.ref('gameStatus').set({ started: true, finished: false, startTime: Date.now(), duration: mins * 60 });
     }
 
     db.ref('gameStatus').on('value', snap => {
-        const status = snap.val();
+        const s = snap.val();
         document.querySelectorAll('.container > div').forEach(d => d.classList.add('hidden'));
-        
-        if (status?.finished) {
-            showResults();
-        } else if (status?.started) {
+        if (s?.finished) showResults();
+        else if (s?.started) {
             document.getElementById('screen-game').classList.remove('hidden');
             if (myRole === 'GM') document.getElementById('gm-dashboard').classList.remove('hidden');
             else document.getElementById('hunt-ui').classList.remove('hidden');
-            startTimer(status.startTime, status.duration);
+            startTimer(s.startTime, s.duration);
         } else {
             clearInterval(timerInterval);
             document.getElementById(myRole === 'GM' ? 'screen-enlist' : 'screen-wait').classList.remove('hidden');
@@ -192,11 +203,8 @@
 
     db.ref('players').on('value', snap => {
         players = snap.exists() ? Object.values(snap.val()) : [];
-        if (document.getElementById('screen-results').classList.contains('hidden')) {
-            myRole === 'GM' ? renderGMDashboard() : (updateTarget(), renderPlayerScore());
-        } else {
-            showResults(); 
-        }
+        if (!document.getElementById('screen-results').classList.contains('hidden')) showResults();
+        else { myRole === 'GM' ? renderGMDashboard() : (updateTarget(), renderPlayerScore()); }
     });
 
     function startTimer(start, dur) {
@@ -205,12 +213,11 @@
             const rem = dur - Math.floor((Date.now() - start) / 1000);
             if (rem <= 0) { 
                 clearInterval(timerInterval); 
-                document.getElementById('timer').innerText = "00:00";
                 if (myRole === 'GM') db.ref('gameStatus/finished').set(true);
                 return;
             }
-            const m = Math.floor(rem/60), s = rem%60;
-            document.getElementById('timer').innerText = `${m}:${s < 10 ? '0'+s : s}`;
+            const m = Math.floor(rem/60), sec = rem%60;
+            document.getElementById('timer').innerText = `${m}:${sec < 10 ? '0'+sec : sec}`;
         }, 1000);
     }
 
@@ -218,48 +225,31 @@
         document.querySelectorAll('.container > div').forEach(d => d.classList.add('hidden'));
         document.getElementById('screen-results').classList.remove('hidden');
         if (myRole === 'GM') document.getElementById('gm-reset-after').classList.remove('hidden');
+        
+        const sorted = [...players].sort((a, b) => (b.kills || 0) - (a.kills || 0));
+        const list = (t) => sorted.filter(p => p.team === t && (p.kills || 0) > 0).map(p => `
+            <div class="result-card">
+                <div style="display:flex; align-items:center; gap:10px;"><img src="${p.photo}"><b>${p.name}</b></div>
+                <b style="color:var(--gold)">${p.kills} PK</b>
+            </div>
+        `).join('') || '<p style="text-align:center; opacity:0.5;">Nėra nužudymų</p>';
 
-        const redDiv = document.getElementById('results-red');
-        const blueDiv = document.getElementById('results-blue');
-
-        const sortedPlayers = [...players].sort((a, b) => (b.kills || 0) - (a.kills || 0));
-
-        const renderList = (team) => sortedPlayers
-            .filter(p => p.team === team && (p.kills || 0) > 0)
-            .map(p => `
-                <div class="result-card">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <img src="${p.photo}">
-                        <b>${p.name}</b>
-                    </div>
-                    <b style="color:var(--gold); font-size:1.2rem;">${p.kills} TAŠKAI</b>
-                </div>
-            `).join('') || '<p style="opacity:0.5; text-align:center;">Taškų nėra</p>';
-
-        redDiv.innerHTML = renderList('RAUDONA');
-        blueDiv.innerHTML = renderList('MELYNA');
+        document.getElementById('results-red').innerHTML = list('RAUDONA');
+        document.getElementById('results-blue').innerHTML = list('MELYNA');
     }
 
     function updateTarget() {
         const target = players.find(p => p.team !== myRole && p.isAlive);
         const ui = document.getElementById('hunt-ui');
-        if (!target) return ui.innerHTML = "<h1 style='color:var(--green)'>MISIJA ĮVYKDYTA</h1>";
-        
-        ui.innerHTML = `
-            <img class="target-img" src="${target.photo}">
-            <h1>${target.name}</h1>
-            <h2 style="color:var(--gold)">ID: ${target.id}</h2>
-            <input type="tel" id="keyInput" placeholder="--">
-            <button id="killBtn" onclick="checkKill()" class="action-btn" style="background:#a00; color:white;">PATVIRTINTI</button>
-        `;
+        if (!target) return ui.innerHTML = "<h1 style='color:var(--green)'>PERGALĖ!</h1>";
+        ui.innerHTML = `<img class="target-img" src="${target.photo}"><h1>${target.name}</h1><h2 style="color:var(--gold)">ID: ${target.id}</h2><input type="tel" id="keyInput" placeholder="KODAS"><button onclick="checkKill()" class="action-btn" style="background:#a00; color:white;">PATVIRTINTI</button>`;
         window.activeKey = target.key;
         window.activeTargetId = target.id;
     }
 
     window.checkKill = () => {
-        const val = parseInt(document.getElementById('keyInput').value);
-        if (val === window.activeKey) document.getElementById('killer-modal').classList.remove('hidden');
-        else alert("Neteisingas kodas!");
+        if (parseInt(document.getElementById('keyInput').value) === window.activeKey) document.getElementById('killer-modal').classList.remove('hidden');
+        else alert("Klaidingas kodas!");
     };
 
     window.confirmKillerCode = () => {
@@ -273,7 +263,7 @@
                 });
             });
             closeKillerModal();
-        } else alert("Klaidingas tavo kodas!");
+        } else alert("Neteisingas tavo kodas!");
     };
 
     window.closeKillerModal = () => document.getElementById('killer-modal').classList.add('hidden');
@@ -281,26 +271,25 @@
     function renderPlayerScore() {
         const r = players.filter(p => p.team === 'RAUDONA' && p.isAlive).length;
         const b = players.filter(p => p.team === 'MELYNA' && p.isAlive).length;
-        document.getElementById('player-score').innerHTML = `<div style="display:flex; justify-content:space-between; padding:10px; font-weight:bold;"><span style="color:var(--red)">RAUDONI: ${r}</span><span style="color:var(--blue)">MĖLYNI: ${b}</span></div>`;
+        document.getElementById('player-score').innerHTML = `<div style="display:flex; justify-content:space-between; padding:10px; font-weight:bold;"><span style="color:var(--red)">RAUDONA: ${r}</span><span style="color:var(--blue)">MĖLYNA: ${b}</span></div>`;
     }
 
     function renderGMDashboard() {
-        document.getElementById('gm-player-list').innerHTML = players.map((p, i) => `
-            <div class="gm-card" style="border-left-color:${p.team==='RAUDONA'?'var(--red)':'var(--blue)'}; opacity:${p.isAlive?1:0.5}">
+        document.getElementById('gm-player-list').innerHTML = players.map(p => `
+            <div class="gm-card" style="border-left-color:${p.team==='RAUDONA'?'var(--red)':'var(--blue)'}; opacity:${p.isAlive?1:0.4}">
                 <b>${p.name} ${p.isAlive ? '✅' : '💀'}</b>
-                ID: ${p.id} | KODAS: ${p.key}<br>TAŠKAI: ${p.kills || 0}
+                ID: ${p.id} | KODAS: ${p.key}<br>KILLS: ${p.kills || 0}
             </div>
         `).join('');
     }
 
-    window.resetGame = () => { if(confirm("Trinti viską?")) { db.ref().remove(); location.reload(); }};
+    window.resetGame = () => { if(confirm("Ištrinti viską?")) { db.ref().remove(); location.reload(); }};
     window.newRound = () => {
         const mins = parseInt(document.getElementById('gameDurationInput').value) || 60;
         players.forEach(p => { p.isAlive = true; p.id = Math.floor(Math.random()*90+10); p.key = Math.floor(Math.random()*90+10); p.kills = 0; });
         db.ref('players').set(players);
         db.ref('gameStatus').set({ started: true, finished: false, startTime: Date.now(), duration: mins * 60 });
     };
-
 </script>
 </body>
 </html>
