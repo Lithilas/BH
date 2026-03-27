@@ -429,7 +429,8 @@
         if (!hunterCodeStr) return alert("Būtina įvesti savo kodą!");
         
         const hunterCodeVal = parseInt(hunterCodeStr);
-        const validHunter = players.find(p => p.team === myRole && p.isAlive && p.key === hunterCodeVal);
+        // ČIA PAKEISTA: Pašalintas p.isAlive patikrinimas, kad ir nukautas žaidėjas galėtų gauti tašką
+        const validHunter = players.find(p => p.team === myRole && p.key === hunterCodeVal);
 
         if (validHunter) {
             const target = players.find(p => p.team !== myRole && p.isAlive);
