@@ -156,7 +156,6 @@
     let timerInterval;
     let newPlayerSelectedTeam = '';
     
-    // ATNAUJINTA: Globalus NFC įrenginio kintamasis
     let ndefInstance = null;
 
     window.onload = () => {
@@ -257,7 +256,6 @@
         db.ref('gameStatus').set({ nfcSetup: true, started: false }); 
     }
 
-    // TIKROJI KLAIDOS IŠTAISYMAI: Funkcija, kuri privalo būti iškviečiama KIEKVIENU paspaudimu, kad aktyvuotų aparatūrą iš naujo
     async function startNFCScan(successCallback, errorCallback) {
         if (!('NDEFReader' in window)) {
             alert("Jūsų naršyklė nepalaiko Web NFC! Būtina naudoti Chrome telefone Android platformoje per HTTPS.");
@@ -268,11 +266,9 @@
             if (!ndefInstance) {
                 ndefInstance = new NDEFReader();
             }
-            // CRITICAL: Kviečiame scan() KIEKVIENĄ kartą, atnaujindami vartotojo paspaudimo leidimą (User Gesture)
             await ndefInstance.scan();
-            
             ndefInstance.onreading = event => {
-                ndefInstance.onreading = null; // Saugiai išjungiame fone, kad nesidubliuotų klausymasis
+                ndefInstance.onreading = null; 
                 successCallback(event.serialNumber);
             };
             ndefInstance.onreadingerror = () => {
@@ -320,7 +316,9 @@
                 `;
             }
         } else if (myRole === 'RAUDONA' || myRole === 'MELYNA') {
+            // Surandame pirmą žaidėją, kuris dar neturi NFC kodo
             const pendingPlayer = players.find(p => p.team === myRole && !p.nfcId);
+
             if (pendingPlayer) {
                 container.innerHTML = `
                     <img class="target-img" src="${pendingPlayer.photo}" style="border-color:${myRole==='RAUDONA'?'var(--red)':'var(--blue)'}">
@@ -350,25 +348,33 @@
         db.ref('players').set(players);
     };
 
-    // ATNAUJINTA: NFC susiejimas dabar naudoja neperšaunamą skenavimo paleidimą kaskart
+    // TIKRASIS KLAIDOS IŠTAISYMAS: Atnaujinimas vyksta ieškant pagal vardą Firebase fone tiesiogiai per child reference
     window.linkPlayerNFC = function(playerName) {
+        if (!playerName) return;
+        
         const btn = document.getElementById('btnScanSetup');
         btn.innerText = "LAUKIAMA NFC... (Priglauskite)";
         btn.classList.add('scanning');
         
         startNFCScan(async (serial) => {
-            btn.innerText = "NUSKAITYTI ŽYMĘ";
-            btn.classList.remove('scanning');
-
             if (players.some(p => p.nfcId === serial)) {
                 alert("Ši NFC žymė jau priskirta kitam žaidėjui! Naudokite naują.");
+                btn.innerText = "NUSKAITYTI ŽYMĘ";
+                btn.classList.remove('scanning');
                 return;
             }
 
-            const pIndex = players.findIndex(p => p.name === playerName);
-            if (pIndex !== -1) {
-                await db.ref('players/' + pIndex + '/nfcId').set(serial);
-            }
+            // NEPERŠAUNAMAS SPRENDIMAS: Perrenkame Firebase įrašus, surandame žaidėją pagal vardą ir atnaujiname būtent JO unikalų slotą
+            db.ref('players').once('value', snap => {
+                snap.forEach(child => {
+                    if (child.val().name === playerName) {
+                        child.ref.update({ nfcId: serial });
+                    }
+                });
+            });
+            
+            btn.innerText = "NUSKAITYTI ŽYMĘ";
+            btn.classList.remove('scanning');
         }, () => {
             btn.innerText = "NUSKAITYTI ŽYMĘ";
             btn.classList.remove('scanning');
@@ -531,7 +537,6 @@
         document.getElementById('killer-modal').classList.add('hidden');
     }
 
-    // ATNAUJINTA: Žaidimo eigos taikinio skenavimas naudojant naują stabilią NFC funkciją
     window.scanTargetNFC = function() {
         if (!window.activeTargetNFC) return alert("TAIKINYS NERASTAS!");
         
@@ -571,7 +576,6 @@
         });
     }
 
-    // ATNAUJINTA: Žudiko skenavimas naudojant naują stabilią NFC funkciją
     window.scanKillerNFC = function() {
         const btn = document.getElementById('btnScanKiller');
         btn.innerText = "LAUKIAMA JŪSŲ NFC...";
