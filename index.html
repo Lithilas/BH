@@ -287,15 +287,12 @@
         });
     }
 
-    // Atnaujinta render funkcija su naujais Admin valdymo mygtukais progreso lange
     function renderNFCSetup() {
         const container = document.getElementById('nfc-setup-content');
         if (!container) return;
 
         if (myRole === 'GM') {
             const missingNfc = players.filter(p => !p.nfcId);
-            
-            // Bendras admin mygtukų blokas abiem būsenoms
             const adminControlButtons = `
                 <div style="margin-top: 25px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #333; padding-top: 20px;">
                     <button class="action-btn" style="background:#444; color:white; padding:12px; font-size:1rem; margin:0;" onclick="gmGoBackToEdit()">ŽAIDĖJŲ REDAGAVIMAS</button>
@@ -343,36 +340,39 @@
         }
     }
 
-    // NAUJA FUNKCIJA: Grįžimas į žaidėjų redagavimo/pridėjimo ekraną
     window.gmGoBackToEdit = function() {
         if (!confirm("Ar tikrai norite grįžti į žaidėjų redagavimą? Esamas NFC registracijos progresas bus sustabdytas (bet kodai neišsitrina).")) return;
         db.ref('gameStatus').set({ nfcSetup: false, started: false }); 
     };
 
-    // NAUJA FUNKCIJA: Tik NFC kodų išvalymas ir perkrovimas iš naujo
     window.gmResetNfcOnly = function() {
-        if (!confirm("Ar tikrai norite ištrinti visus suvestus NFC kodus ir pradėti skenavimo procesą iš naujo? Žaidėjai ir komandos išliks.")) return;
+        if (!confirm("Ar tikrai norite ištrinti visus suvestus NFC kodus ir pradėti skenavimo procesą iš naujo? Žaidėjai ir komandas išliks.")) return;
         players.forEach(p => p.nfcId = null);
         db.ref('players').set(players);
     };
 
+    // PATAISYTA KLINGANTI LOGIKA: Vietoj viso masyvo perrašymo, tiksliai atnaujinamas TIK vienas nfcId laukas
     window.linkPlayerNFC = function(playerName) {
         const btn = document.getElementById('btnScanSetup');
         btn.innerText = "LAUKIAMA NFC... (Priglauskite)";
         btn.classList.add('scanning');
         
         listenForNFC(async (serial) => {
-            btn.innerText = "NUSKAITYTI ŽYMĘ";
-            btn.classList.remove('scanning');
-
             if (players.some(p => p.nfcId === serial)) {
                 alert("Ši NFC žymė jau priskirta kitam žaidėjui! Naudokite naują.");
+                btn.innerText = "NUSKAITYTI ŽYMĘ";
+                btn.classList.remove('scanning');
                 return;
             }
 
             const pIndex = players.findIndex(p => p.name === playerName);
-            players[pIndex].nfcId = serial;
-            await db.ref('players').set(players);
+            if (pIndex !== -1) {
+                // ATOMINIS ATNAUJINIMAS: atnaujinamas TIK vienas laukelis tam tikrame indekse. Ryšys nebeužstringa.
+                await db.ref('players/' + pIndex + '/nfcId').set(serial);
+            }
+            
+            btn.innerText = "NUSKAITYTI ŽYMĘ";
+            btn.classList.remove('scanning');
         }, () => {
             btn.innerText = "NUSKAITYTI ŽYMĘ";
             btn.classList.remove('scanning');
@@ -463,7 +463,7 @@
 
     db.ref('players').on('value', snap => {
         if (snap.exists()) {
-            players = Object.values(snap.val());
+            players = Object.values(snap.val()); 
         } else {
             players = []; 
         }
