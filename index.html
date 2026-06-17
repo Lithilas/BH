@@ -282,27 +282,54 @@
         }
     }
 
+    // Pataisyta logika: NFC lange dabar rodomas turinys pagal tai, kokia rolė prijungta
     function renderNFCSetup() {
-        if (myRole !== 'GM') return;
-        
-        const pendingPlayer = players.find(p => !p.nfcId);
         const container = document.getElementById('nfc-setup-content');
+        if (!container) return;
 
-        if (pendingPlayer) {
-            container.innerHTML = `
-                <img class="target-img" src="${pendingPlayer.photo}" style="border-color:${pendingPlayer.team==='RAUDONA'?'var(--red)':'var(--blue)'}">
-                <h1 style="margin:10px 0;">${pendingPlayer.name}</h1>
-                <p style="color:#aaa;">Komanda: <b style="color:${pendingPlayer.team==='RAUDONA'?'var(--red)':'var(--blue)'}">${pendingPlayer.team}</b></p>
-                <p style="font-size:0.9rem;">Pridėkite šio žaidėjo NFC žymę ir spauskite mygtuką apačioje.</p>
-                <button id="btnScanSetup" class="action-btn" onclick="linkPlayerNFC('${pendingPlayer.name}')">NUSKAITYTI ŽYMĘ</button>
-            `;
-        } else {
-            // Pataisyta: Visi nuskaityti -> iškart rodoma žinutė „VISI PASIRUOŠĘ“
-            container.innerHTML = `
-                <h1 style="color:var(--green)">VISI PASIRUOŠĘ!</h1>
-                <p style="font-size:1rem; color:#aaa; margin-bottom:20px;">Žaidėjų eiliškumas bus sumaišytas automatiškai paspaudus mygtuką fone.</p>
-                <button class="action-btn" style="background:var(--gold); color:black;" onclick="startActualGame()">PRADĖTI ŽAIDIMĄ</button>
-            `;
+        if (myRole === 'GM') {
+            // GM (Admin) puslapio logika: stebi progresą ir laukia kol visi bus pasiruošę
+            const missingNfc = players.filter(p => !p.nfcId);
+            
+            if (missingNfc.length > 0) {
+                container.innerHTML = `
+                    <h3 style="color:var(--gold)">LAUKIAMA, KOL KOMANDOS SUSIES NFC ŽYMES...</h3>
+                    <div style="text-align:left; margin:20px auto; max-width:300px; line-height:1.8;">
+                        ${players.map(p => `
+                            <div style="color:${p.team==='RAUDONA'?'var(--red)':'var(--blue)'}">
+                                ${p.nfcId ? '🟢' : '⚫'} <b>${p.name}</b>: ${p.nfcId ? 'SUSIETAS' : 'LAUKIA'}
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } else {
+                // Visi nuskenuoti! GM ekrane iššoka didelis pranešimas „VISI PASIRUOŠĘ“
+                container.innerHTML = `
+                    <h1 style="color:var(--green); font-size:2.5rem; letter-spacing:2px;">VISI PASIRUOŠĘ!</h1>
+                    <p style="font-size:1rem; color:#aaa; margin-bottom:20px;">Abi komandos sėkmingai suvedė savo NFC žymes.</p>
+                    <button class="action-btn" style="background:var(--gold); color:black;" onclick="startActualGame()">PRADĖTI ŽAIDIMĄ (IŠMAIŠYTI)</button>
+                `;
+            }
+        } else if (myRole === 'RAUDONA' || myRole === 'MELYNA') {
+            // Komandų puslapių logika: kiekviena komanda mato tik savo narius vieną po kito
+            const pendingPlayer = players.find(p => p.team === myRole && !p.nfcId);
+            
+            if (pendingPlayer) {
+                container.innerHTML = `
+                    <img class="target-img" src="${pendingPlayer.photo}" style="border-color:${myRole==='RAUDONA'?'var(--red)':'var(--blue)'}">
+                    <h1 style="margin:10px 0;">${pendingPlayer.name}</h1>
+                    <p style="color:#aaa;">Komanda: <b style="color:${myRole==='RAUDONA'?'var(--red)':'var(--blue)'}">${myRole}</b></p>
+                    <p style="font-size:0.9rem; margin-bottom: 15px;">Pridėkite savo NFC žymę ir spauskite mygtuką apačioje.</p>
+                    <button id="btnScanSetup" class="action-btn" onclick="linkPlayerNFC('${pendingPlayer.name}')">NUSKAITYTI ŽYMĘ</button>
+                `;
+            } else {
+                // Komanda baigė skenavimą savo bazėje
+                container.innerHTML = `
+                    <h1 style="color:var(--green)">JŪSŲ KOMANDA PASIRUOŠUSI!</h1>
+                    <p style="font-size:1rem; color:#aaa;">Visi jūsų komandos nariai sėkmingai susiejo NFC.</p>
+                    <p style="font-size:0.9rem; color:var(--gold); margin-top:20px; animation: pulse 1.5s infinite;">Laukiama, kol GM paleis žaidimą...</p>
+                `;
+            }
         }
     }
 
@@ -330,7 +357,7 @@
         }
     };
 
-    // Pataisyta: Žaidėjų eiliškumo išmaišymas įvyksta TIK paspaudus pradėti žaidimą
+    // Žaidėjų eiliškumo išmaišymas įvyksta TIK paspaudus pradėti žaidimą (kai visi pasiruošę)
     window.startActualGame = function() {
         for (let i = players.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
@@ -371,7 +398,7 @@
         document.querySelectorAll('.container > div').forEach(d => d.classList.add('hidden'));
 
         if (status && status.nfcSetup) {
-            if (myRole === 'GM') {
+            if (myRole === 'GM' || myRole === 'RAUDONA' || myRole === 'MELYNA') {
                 document.getElementById('screen-nfc-setup').classList.remove('hidden');
                 renderNFCSetup();
             } else {
@@ -420,7 +447,7 @@
             players = []; 
         }
         
-        if (myRole === 'GM' && !document.getElementById('screen-nfc-setup').classList.contains('hidden')) {
+        if (!document.getElementById('screen-nfc-setup').classList.contains('hidden')) {
             renderNFCSetup();
         }
         
@@ -487,7 +514,6 @@
         document.getElementById('killer-modal').classList.add('hidden');
     }
 
-    // Pataisyta: Taikinio patvirtinimas naudojant nukauto žaidėjo NFC
     window.scanTargetNFC = async function() {
         if (!window.activeTargetNFC) return alert("TAIKINYS NERASTAS!");
         
@@ -529,7 +555,6 @@
         }
     }
 
-    // Pataisyta: Žudiko identifikacija naudojant jo paties NFC žymę
     window.scanKillerNFC = async function() {
         const btn = document.getElementById('btnScanKiller');
         btn.innerText = "LAUKIAMA JŪSŲ NFC...";
@@ -624,7 +649,7 @@
                 
                 db.ref('players').set(players);
                 closeAddPlayerModal();
-                alert("Žaidėjas pridėtas! Kadangi žaidimas jau vyksta, NFC jam priskirti šiuo metu negalima (funkcija veikia tik prieš startą).");
+                alert("Žaidėjas pridėtas!");
             };
         };
     }
