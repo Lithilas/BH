@@ -156,7 +156,9 @@
     let timerInterval;
     let newPlayerSelectedTeam = '';
     
+    // NEPERŠAUNAMA STRATEGIJA: Vienas globalus įrenginio valdytojas visam puslapiui
     let ndefInstance = null;
+    let activeNfcCallback = null;
 
     window.onload = () => {
         if (myRole !== 'GM') {
@@ -233,7 +235,7 @@
         renderAssign();
     }
 
-    // PATAISYTA: Į komandų priskyrimo langą įtrauktas „ŠALINTI“ mygtukas adminui
+    // Patobulinta: Pridėtas „ŠALINTI“ mygtukas tiesiai komandų skirstymo lange
     function renderAssign() {
         document.getElementById('assignList').innerHTML = players.map((p, i) => `
             <div class="player-card" style="border-left-color:${p.team==='RAUDONA'?'var(--red)':p.team==='MELYNA'?'var(--blue)':'#444'}">
@@ -258,45 +260,51 @@
         db.ref('gameStatus').set({ nfcSetup: true, started: false }); 
     }
 
-    // TIKRASIS STRIGIMO IŠTAISYMAS: Kodo klausymasis apsaugotas nuo „Chrome“ vidinių scan išmetimų, todėl naujas callback'as persirašo visada
-    async function startNFCScan(successCallback, errorCallback) {
+    // TIKRASIS SPRENDIMAS: Vienkartinis aparatūros įjungimas. Klaidų nebebus, nes onreading tiesiog saugiai nukreipia signalą.
+    async function ensureNFCScanning() {
         if (!('NDEFReader' in window)) {
             alert("Jūsų naršyklė nepalaiko Web NFC! Būtina naudoti Chrome telefone Android platformoje per HTTPS.");
-            if (errorCallback) errorCallback();
-            return;
+            return false;
         }
-        try {
-            if (!ndefInstance) {
+        if (!ndefInstance) {
+            try {
                 ndefInstance = new NDEFReader();
+                await ndefInstance.scan();
+                ndefInstance.onreading = event => {
+                    if (activeNfcCallback) {
+                        const callbackToExecute = activeNfcCallback;
+                        activeNfcCallback = null; // Momentinis išvalymas saugumui nuo dubliavimo
+                        callbackToExecute(event.serialNumber);
+                    }
+                };
+                ndefInstance.onreadingerror = () => {
+                    alert("Klaida nuskaitant žymę. Pridėkite dar kartą.");
+                };
+            } catch (error) {
+                console.error(error);
+                alert("Nepavyko paleisti NFC skaitytuvo. Patikrinkite nustatymus.");
+                return false;
             }
-            // Jei skaitytuvas jau aktyvus fone, Chrome išmeta klaidą. Mes ją saugiai apeiname, bet handlerį vistiek perrašome nauju!
-            try { 
-                await ndefInstance.scan(); 
-            } catch(scanError) {
-                console.log("Skaitytuvas jau aktyvintas praėjusio žaidėjo seanse.");
-            }
-            
-            ndefInstance.onreading = event => {
-                successCallback(event.serialNumber);
-            };
-            ndefInstance.onreadingerror = () => {
-                alert("Klaida nuskaitant žymę. Pridėkite dar kartą.");
-                if (errorCallback) errorCallback();
-            };
-        } catch (error) {
-            console.error(error);
-            alert("Nepavyko konfigūruoti NFC skaitytuvo.");
-            if (errorCallback) errorCallback();
         }
+        return true;
     }
 
-    // PATAISYTA: NFC priskyrimas grąžintas išskirtinai tik į Admin (GM) ekraną, kur žaidėjai eina iš eilės
     function renderNFCSetup() {
         const container = document.getElementById('nfc-setup-content');
         if (!container) return;
 
         if (myRole === 'GM') {
-            const pendingPlayer = players.find(p => !p.nfcId);
+            let pendingIndex = -1;
+            let pendingPlayer = null;
+
+            for (let i = 0; i < players.length; i++) {
+                if (!players[i].nfcId) {
+                    pendingPlayer = players[i];
+                    pendingIndex = i;
+                    break;
+                }
+            }
+
             const adminControlButtons = `
                 <div style="margin-top: 25px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #333; padding-top: 20px;">
                     <button class="action-btn" style="background:#444; color:white; padding:12px; font-size:1rem; margin:0;" onclick="gmGoBackToEdit()">ŽAIDĖJŲ REDAGAVIMAS</button>
@@ -304,14 +312,14 @@
                 </div>
             `;
 
-            if (pendingPlayer) {
+            if (pendingPlayer && pendingIndex !== -1) {
                 container.innerHTML = `
                     <h3 style="color:var(--gold)">NFC KODO PRISKYRIMAS</h3>
                     <img class="target-img" src="${pendingPlayer.photo}" style="border-color:${pendingPlayer.team==='RAUDONA'?'var(--red)':'var(--blue)'}">
                     <h1 style="margin:10px 0;">${pendingPlayer.name}</h1>
                     <p style="color:#aaa;">Komanda: <b style="color:${pendingPlayer.team==='RAUDONA'?'var(--red)':'var(--blue)'}">${pendingPlayer.team}</b></p>
                     <p style="font-size:0.9rem; margin-bottom: 15px;">Priglauskite šio žaidėjo NFC žymę ir spauskite mygtuką.</p>
-                    <button id="btnScanSetup" class="action-btn" onclick="linkPlayerNFC('${pendingPlayer.name}')">NUSKAITYTI ŽYMĘ</button>
+                    <button id="btnScanSetup" class="action-btn" onclick="linkPlayerNFC(${pendingIndex})">NUSKAITYTI ŽYMĘ</button>
                     
                     <div style="text-align:left; margin:20px auto; max-width:300px; line-height:1.6; font-size:0.85rem; border-top:1px solid #222; padding-top:10px;">
                         <b style="color:#aaa;">Sąrašo progresas:</b>
@@ -332,7 +340,6 @@
                 `;
             }
         } else {
-            // Žaidėjų ekranai tik stebi admino progresą gyvai
             container.innerHTML = `
                 <h3 style="color:var(--gold); text-align:center;">NFC ŽYMIŲ REGISTRACIJA</h3>
                 <p style="font-size:1rem; color:#aaa; text-align:center;">Prieikite prie žaidimo administratoriaus (GM) užregistruoti savo NFC žymę.</p>
@@ -348,25 +355,32 @@
     }
 
     window.gmGoBackToEdit = function() {
-        if (!confirm("Ar tikrai norite grįžti į žaidėjų redagavimą? Esamas NFC registracijos progresas bus sustabdytas (bet kodai neišsitrina).")) return;
+        if (!confirm("Ar tikrai norite grįžti į žaidėjų redagavimą? Esamas NFC registracijos progresas bus sustabdytas.")) return;
         db.ref('gameStatus').set({ nfcSetup: false, started: false }); 
     };
 
     window.gmResetNfcOnly = function() {
-        if (!confirm("Ar tikrai norite ištrinti visus suvestus NFC kodus ir pradėti skenavimo procesą iš naujo? Žaidėjai ir komandas išliks.")) return;
+        if (!confirm("Ar tikrai norite ištrinti visus suvestus NFC kodus ir pradėti skenavimo procesą iš naujo?")) return;
         players.forEach(p => p.nfcId = null);
         db.ref('players').set(players);
     };
 
-    // PATAISYTA: Kadangi viskas vyksta viename Admin įrenginyje, atnaujinamas visas masyvas iškart – jokių indeksų poslinkių
-    window.linkPlayerNFC = function(playerName) {
-        if (!playerName) return;
+    // PATAISYTA: Užklausos nukreipiamos į globalų handlerį. Jokio dubliavimo ir pakibimo!
+    window.linkPlayerNFC = async function(pIndex) {
+        if (pIndex === undefined || pIndex === -1) return;
         
         const btn = document.getElementById('btnScanSetup');
         btn.innerText = "LAUKIAMA NFC... (Priglauskite)";
         btn.classList.add('scanning');
         
-        startNFCScan(async (serial) => {
+        const ready = await ensureNFCScanning();
+        if (!ready) {
+            btn.innerText = "NUSKAITYTI ŽYMĘ";
+            btn.classList.remove('scanning');
+            return;
+        }
+
+        activeNfcCallback = async (serial) => {
             if (players.some(p => p.nfcId === serial)) {
                 alert("Ši NFC žymė jau priskirta kitam žaidėjui! Naudokite naują.");
                 btn.innerText = "NUSKAITYTI ŽYMĘ";
@@ -374,18 +388,11 @@
                 return;
             }
 
-            const pIndex = players.findIndex(p => p.name === playerName);
-            if (pIndex !== -1) {
+            if (players[pIndex]) {
                 players[pIndex].nfcId = serial;
                 await db.ref('players').set(players);
             }
-            
-            btn.innerText = "NUSKAITYTI ŽYMĘ";
-            btn.classList.remove('scanning');
-        }, () => {
-            btn.innerText = "NUSKAITYTI ŽYMĘ";
-            btn.classList.remove('scanning');
-        });
+        };
     };
 
     window.startActualGame = function() {
@@ -402,7 +409,7 @@
     }
 
     window.newRound = function() {
-        if (!confirm("Ar tikrai norite pradėti NAUJĄ RAUNDĄ? Visi žaidėjai liks tie patys, bet jų NFC žymės bus ištrintos, kad galėtumėte susieti iš naujo.")) return;
+        if (!confirm("Ar tikrai norite pradėti NAUJĄ RAUNDĄ? Visi žaidėjai liks tie patys, bet jų NFC žymės bus ištrintos.")) return;
         
         players.forEach(p => { 
             p.nfcId = null; 
@@ -415,7 +422,7 @@
     }
 
     window.resetGame = function() {
-        if (!confirm("Ar tikrai norite IŠTRINTI visus duomenis? Žaidėjus tega suvedinėti iš naujo.")) return;
+        if (!confirm("Ar tikrai norite IŠTRINTI visus duomenis?")) return;
         db.ref('players').remove();
         db.ref('gameStatus').set({ started: false, nfcSetup: false });
         players = [];
@@ -477,7 +484,6 @@
             players = []; 
         }
         
-        // PATAISYTA: Atnaujina komandų priskyrimo ir NFC setup vaizdus gyvai trinant/redaguojant duomenis fone
         if (!document.getElementById('screen-assign').classList.contains('hidden')) {
             renderAssign();
         }
@@ -548,14 +554,17 @@
         document.getElementById('killer-modal').classList.add('hidden');
     }
 
-    window.scanTargetNFC = function() {
+    window.scanTargetNFC = async function() {
         if (!window.activeTargetNFC) return alert("TAIKINYS NERASTAS!");
         
         const killBtn = document.getElementById('killBtn');
         killBtn.innerText = "LAUKIAMA NFC... (Priglauskite)";
         killBtn.classList.add('scanning');
 
-        startNFCScan((serial) => {
+        const ready = await ensureNFCScanning();
+        if(!ready) return;
+
+        activeNfcCallback = (serial) => {
             killBtn.innerText = "NUSKAITYTI TAIKINIO NFC (PATVIRTINTI)";
             killBtn.classList.remove('scanning');
             
@@ -581,18 +590,18 @@
                     }
                 }, 1000);
             }
-        }, () => {
-            killBtn.innerText = "NUSKAITYTI TAIKINIO NFC (PATVIRTINTI)";
-            killBtn.classList.remove('scanning');
-        });
+        };
     }
 
-    window.scanKillerNFC = function() {
+    window.scanKillerNFC = async function() {
         const btn = document.getElementById('btnScanKiller');
         btn.innerText = "LAUKIAMA JŪSŲ NFC...";
         btn.classList.add('scanning');
 
-        startNFCScan((serial) => {
+        const ready = await ensureNFCScanning();
+        if(!ready) return;
+
+        activeNfcCallback = (serial) => {
             btn.innerText = "NUSKENUOTI SAVO NFC";
             btn.classList.remove('scanning');
 
@@ -619,10 +628,7 @@
             } else {
                 alert("KLAIDA: Šis NFC nepriklauso jūsų komandai arba žaidėjas nerastas!");
             }
-        }, () => {
-            btn.innerText = "NUSKENUOTI SAVO NFC";
-            btn.classList.remove('scanning');
-        });
+        };
     }
 
     window.openAddPlayerModal = function() {
