@@ -25,30 +25,33 @@
         .player-card img { width: 60px; height: 60px; border-radius: 4px; object-fit: cover; background: #000; flex-shrink: 0; }
         
         /* Buttons */
-        .action-btn { background: var(--gold); color: black; padding: 18px; border: none; font-weight: bold; width: 100%; cursor: pointer; border-radius: 8px; font-size: 1.1rem; margin-top: 10px; transition: 0.3s; }
+        .action-btn { background: var(--gold); color: black; padding: 18px; border: none; font-weight: bold; width: 100%; cursor: pointer; border-radius: 8px; font-size: 1.1rem; margin-top: 10px; transition: 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .action-btn:active { transform: scale(0.98); }
         .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .team-btn { padding: 12px; border: none; color: white; opacity: 0.2; cursor: pointer; font-weight: bold; flex: 1; border-radius: 4px; }
+        .team-btn { padding: 12px; border: none; color: white; opacity: 0.2; cursor: pointer; font-weight: bold; flex: 1; border-radius: 4px; transition: 0.2s; }
         .team-btn.active { opacity: 1; outline: 2px solid white; transform: scale(1.05); }
         
         /* Game UI */
-        #timer { font-size: 4rem; text-align: center; color: var(--gold); font-family: monospace; font-weight: bold; margin: 15px 0; }
-        .target-frame { border: 4px solid var(--gold); padding: 15px; text-align: center; background: #000; border-radius: 12px; }
+        #timer { font-size: 4rem; text-align: center; color: var(--gold); font-family: monospace; font-weight: bold; margin: 15px 0; text-shadow: 0 0 10px rgba(255,215,0,0.3); }
+        .target-frame { border: 4px solid var(--gold); padding: 15px; text-align: center; background: #000; border-radius: 12px; box-shadow: 0 8px 15px rgba(0,0,0,0.5); }
         .target-img { width: 160px; height: 160px; object-fit: cover; border: 2px solid #333; border-radius: 12px; margin: 0 auto; display: block; }
         
-        /* GM Dashboard Compact View */
-        #gm-player-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 15px; }
+        /* PATOBULINTAS GM Dashboard */
+        #gm-player-list { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
         .gm-card { 
-            background: #1a1a1a; padding: 8px; border-radius: 6px; 
-            display: flex; flex-direction: column; gap: 8px; border-left: 4px solid #444;
-            font-size: 0.85rem; overflow: hidden;
+            background: #1e1e1e; padding: 12px; border-radius: 10px; 
+            display: flex; flex-direction: column; gap: 10px; border-left: 6px solid #444;
+            font-size: 0.9rem; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+            position: relative;
         }
-        .gm-card-top { display: flex; align-items: center; gap: 8px; }
-        .gm-card img { width: 40px; height: 40px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }
+        .gm-card-top { display: flex; align-items: center; gap: 12px; }
+        .gm-card img { width: 45px; height: 45px; border-radius: 6px; object-fit: cover; flex-shrink: 0; border: 1px solid #333; }
         .gm-card-info { display: flex; flex-direction: column; overflow: hidden; flex: 1; }
-        .gm-card-info b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.9rem; }
-        .gm-status { font-size: 0.75rem; color: #aaa; margin-top: 2px; line-height: 1.3; }
-        .gm-actions { display: flex; gap: 5px; width: 100%; }
-        .gm-btn { flex: 1; border: none; padding: 6px; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: bold; }
+        .gm-card-info b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 1rem; color: #fff; }
+        .gm-status { font-size: 0.8rem; color: #ccc; background: #111; padding: 6px; border-radius: 6px; margin-top: 5px; line-height: 1.5; border: 1px solid #222; }
+        .gm-actions { display: flex; gap: 8px; width: 100%; margin-top: auto; }
+        .gm-btn { flex: 1; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 0.75rem; font-weight: bold; transition: 0.2s; text-transform: uppercase; letter-spacing: 0.5px; }
+        .gm-btn:hover { filter: brightness(1.2); }
         
         /* NFC Scan Anim */
         .scanning { animation: pulse 1.5s infinite; background-color: #333 !important; color: var(--gold) !important; }
@@ -57,10 +60,18 @@
 </head>
 <body>
 <div class="container">
-    <div id="screen-enlist">
+    <div id="screen-setup" class="hidden">
+        <h2 style="color:var(--gold); text-align:center; margin-top:50px; margin-bottom: 30px;">ŽAIDIMO NUSTATYMAI</h2>
+        <button class="action-btn" style="background:var(--blue); color:white; margin-bottom: 15px;" onclick="selectGameMode(true)">ŽAISTI SU NUOTRAUKOMIS</button>
+        <button class="action-btn" style="background:#444; color:white;" onclick="selectGameMode(false)">GREITAS ŽAIDIMAS (BE NUOTRAUKŲ)</button>
+    </div>
+
+    <div id="screen-enlist" class="hidden">
         <h2 style="color:var(--gold)">PRIDĖTI ŽAIDĖJUS</h2>
         <input type="text" id="nameInput" placeholder="ĮRAŠYTI NICK'Ą" style="width: 100%; padding: 15px; box-sizing: border-box; background: #222; color: white; border: 1px solid #444; border-radius: 8px; font-size: 1.1rem; margin-bottom: 15px;">
         
+        <button id="btnQuickAdd" class="action-btn hidden" style="background:var(--green); color:white; margin-bottom:15px; margin-top:0;" onclick="quickAddPlayer()">PRIDĖTI ŽAIDĖJĄ</button>
+
         <div id="drop-zone">
             <b style="font-size: 1.2rem;">Įtempti foto</b><br>
             <small>ARBA PASIRINKTI NAUJĄ FOTO</small>
@@ -125,7 +136,9 @@
     <div style="background:#151515; padding:25px; border-radius:12px; border:2px solid var(--gold); text-align:center; width:90%; max-width:400px; box-sizing:border-box;">
         <h3 style="color:var(--gold); margin-top:0;">PRIDĖTI NAUJĄ ŽAIDĖJĄ</h3>
         <input type="text" id="newPlayerName" placeholder="ĮRAŠYTI NICK'Ą" style="width: 100%; padding: 15px; box-sizing: border-box; background: #222; color: white; border: 1px solid #444; border-radius: 8px; font-size: 1.1rem; margin-bottom: 15px;">
+        
         <input type="file" id="newPlayerFile" accept="image/*" style="width: 100%; margin-bottom: 15px; color: white; font-size: 1rem;">
+        
         <div style="display:flex; gap:5px; margin-bottom: 20px;">
             <button id="btnTeamRed" class="team-btn" style="background:var(--red)" onclick="selectNewPlayerTeam('RAUDONA')">RED</button>
             <button id="btnTeamBlue" class="team-btn" style="background:var(--blue)" onclick="selectNewPlayerTeam('MELYNA')">BLUE</button>
@@ -156,16 +169,14 @@
     let timerInterval;
     let newPlayerSelectedTeam = '';
     
-    // NEPERŠAUNAMA STRATEGIJA: Vienas globalus įrenginio valdytojas visam puslapiui
+    // Nustatymai
+    let usePhotos = true;
+    const DEFAULT_AVATAR = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjMmEyYTJhIi8+PGNpcmNsZSBjeD0iNTAiIGN5PSI0MCIgcj0iMjIiIGZpbGw9IiM1NTUiLz48cGF0aCBkPSJNMjAgMTAwIEMyMCA1NSA4MCA1NSA4MCAxMDAiIGZpbGw9IiM1NTUiLz48L3N2Zz4=";
+    
     let ndefInstance = null;
     let activeNfcCallback = null;
 
-    window.onload = () => {
-        if (myRole !== 'GM') {
-            document.getElementById('screen-enlist').classList.add('hidden');
-            document.getElementById('screen-wait').classList.remove('hidden');
-        }
-    };
+    // Kadangi startas kontroliuojamas per firebase, langų rodymas tvarkomas db on('value') viduje.
 
     const dz = document.getElementById('drop-zone');
     const fi = document.getElementById('fileInput');
@@ -182,6 +193,19 @@
         if (e.dataTransfer.files.length) processFile(e.dataTransfer.files[0]);
     });
     if(fi) fi.onchange = (e) => { if (e.target.files.length) processFile(e.target.files[0]); };
+
+    // Nauja funkcija režimo parinkimui
+    window.selectGameMode = function(withPhotos) {
+        db.ref('gameStatus').update({ modeSelected: true, usePhotos: withPhotos });
+    };
+
+    window.quickAddPlayer = function() {
+        const nameVal = document.getElementById('nameInput').value.trim();
+        if (!nameVal) return alert("Prašome įvesti vardą!");
+        
+        addPlayerToSystem(nameVal, DEFAULT_AVATAR);
+        document.getElementById('nameInput').value = '';
+    }
 
     function processFile(file) {
         const nameVal = document.getElementById('nameInput').value.trim();
@@ -205,21 +229,24 @@
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 
                 const compressedData = canvas.toDataURL('image/jpeg', 0.6);
-
-                players.push({
-                    name: nameVal,
-                    photo: compressedData,
-                    nfcId: null, 
-                    team: '', 
-                    isAlive: true,
-                    kills: 0
-                });
+                addPlayerToSystem(nameVal, compressedData);
                 
                 document.getElementById('nameInput').value = '';
                 document.getElementById('fileInput').value = ''; 
-                renderEnlist();
             };
         };
+    }
+
+    function addPlayerToSystem(name, photoData) {
+        players.push({
+            name: name,
+            photo: photoData,
+            nfcId: null, 
+            team: '', 
+            isAlive: true,
+            kills: 0
+        });
+        renderEnlist();
     }
 
     function renderEnlist() {
@@ -235,7 +262,6 @@
         renderAssign();
     }
 
-    // Patobulinta: Pridėtas „ŠALINTI“ mygtukas tiesiai komandų skirstymo lange
     function renderAssign() {
         document.getElementById('assignList').innerHTML = players.map((p, i) => `
             <div class="player-card" style="border-left-color:${p.team==='RAUDONA'?'var(--red)':p.team==='MELYNA'?'var(--blue)':'#444'}">
@@ -257,10 +283,9 @@
     function startNFCSetup() {
         if (players.some(p => !p.team)) return alert("Priskirkite visus žaidėjus komandoms!");
         db.ref('players').set(players);
-        db.ref('gameStatus').set({ nfcSetup: true, started: false }); 
+        db.ref('gameStatus').update({ nfcSetup: true, started: false }); 
     }
 
-    // TIKRASIS SPRENDIMAS: Vienkartinis aparatūros įjungimas. Klaidų nebebus, nes onreading tiesiog saugiai nukreipia signalą.
     async function ensureNFCScanning() {
         if (!('NDEFReader' in window)) {
             alert("Jūsų naršyklė nepalaiko Web NFC! Būtina naudoti Chrome telefone Android platformoje per HTTPS.");
@@ -273,7 +298,7 @@
                 ndefInstance.onreading = event => {
                     if (activeNfcCallback) {
                         const callbackToExecute = activeNfcCallback;
-                        activeNfcCallback = null; // Momentinis išvalymas saugumui nuo dubliavimo
+                        activeNfcCallback = null; 
                         callbackToExecute(event.serialNumber);
                     }
                 };
@@ -355,17 +380,16 @@
     }
 
     window.gmGoBackToEdit = function() {
-        if (!confirm("Ar tikrai norite grįžti į žaidėjų redagavimą? Esamas NFC registracijos progresas bus sustabdytas.")) return;
-        db.ref('gameStatus').set({ nfcSetup: false, started: false }); 
+        if (!confirm("Ar tikrai norite grįžti į žaidėjų redagavimą? Esamas NFC registracijos progresas bus sustabdytas (bet kodai neišsitrina).")) return;
+        db.ref('gameStatus').update({ nfcSetup: false, started: false }); 
     };
 
     window.gmResetNfcOnly = function() {
-        if (!confirm("Ar tikrai norite ištrinti visus suvestus NFC kodus ir pradėti skenavimo procesą iš naujo?")) return;
+        if (!confirm("Ar tikrai norite ištrinti visus suvestus NFC kodus ir pradėti skenavimo procesą iš naujo? Žaidėjai ir komandos išliks.")) return;
         players.forEach(p => p.nfcId = null);
         db.ref('players').set(players);
     };
 
-    // PATAISYTA: Užklausos nukreipiamos į globalų handlerį. Jokio dubliavimo ir pakibimo!
     window.linkPlayerNFC = async function(pIndex) {
         if (pIndex === undefined || pIndex === -1) return;
         
@@ -401,7 +425,7 @@
             [players[i], players[j]] = [players[j], players[i]];
         }
         db.ref('players').set(players);
-        db.ref('gameStatus').set({ nfcSetup: false, started: true }); 
+        db.ref('gameStatus').update({ nfcSetup: false, started: true }); 
     };
 
     window.startGlobalTimer = function() {
@@ -418,31 +442,37 @@
         });
         
         db.ref('players').set(players);
-        db.ref('gameStatus').set({ nfcSetup: true, started: false, startTime: null });
+        db.ref('gameStatus').update({ nfcSetup: true, started: false, startTime: null });
     }
 
     window.resetGame = function() {
         if (!confirm("Ar tikrai norite IŠTRINTI visus duomenis?")) return;
         db.ref('players').remove();
-        db.ref('gameStatus').set({ started: false, nfcSetup: false });
+        db.ref('gameStatus').set({ started: false, nfcSetup: false, modeSelected: false });
         players = [];
         document.getElementById('playerList').innerHTML = '';
         document.getElementById('assignList').innerHTML = '';
     }
 
     db.ref('gameStatus').on('value', snap => {
-        const status = snap.val();
+        const status = snap.val() || { started: false, nfcSetup: false, modeSelected: false };
+        
+        // Atnaujinam globalią nuotraukų taisyklę
+        if (status.usePhotos !== undefined) {
+            usePhotos = status.usePhotos;
+        }
+
         document.querySelectorAll('.container > div').forEach(d => d.classList.add('hidden'));
 
-        if (status && status.nfcSetup) {
-            if (myRole === 'GM' || myRole === 'RAUDONA' || myRole === 'MELYNA') {
-                document.getElementById('screen-nfc-setup').classList.remove('hidden');
-                renderNFCSetup();
+        if (!status.modeSelected) {
+            // Pats pirmas startas
+            if (myRole === 'GM') {
+                document.getElementById('screen-setup').classList.remove('hidden');
             } else {
                 document.getElementById('screen-wait').classList.remove('hidden');
             }
-        }
-        else if (status && status.started) {
+        } 
+        else if (status.started) {
             document.getElementById('screen-game').classList.remove('hidden');
             
             if (myRole === 'GM') {
@@ -467,10 +497,29 @@
                 clearInterval(timerInterval);
                 document.getElementById('timer').innerText = "105:00";
             }
-        } else {
-            clearInterval(timerInterval);
+        } 
+        else if (status.nfcSetup) {
+            if (myRole === 'GM' || myRole === 'RAUDONA' || myRole === 'MELYNA') {
+                document.getElementById('screen-nfc-setup').classList.remove('hidden');
+                renderNFCSetup();
+            } else {
+                document.getElementById('screen-wait').classList.remove('hidden');
+            }
+        } 
+        else {
+            // Pridėjimo / Skirstymo fazė
             if (myRole === 'GM') {
+                // Jei grįžtama iš NFC, arba einama toliau, parodome atitinkamai. Bet čia renderEnroll
                 document.getElementById('screen-enlist').classList.remove('hidden');
+                
+                // Pritaikome UI pagal tai, koks režimas pasirinktas
+                if (!usePhotos) {
+                    document.getElementById('drop-zone').classList.add('hidden');
+                    document.getElementById('btnQuickAdd').classList.remove('hidden');
+                } else {
+                    document.getElementById('drop-zone').classList.remove('hidden');
+                    document.getElementById('btnQuickAdd').classList.add('hidden');
+                }
             } else {
                 document.getElementById('screen-wait').classList.remove('hidden');
             }
@@ -484,6 +533,9 @@
             players = []; 
         }
         
+        if (!document.getElementById('screen-enlist').classList.contains('hidden')) {
+            renderEnlist();
+        }
         if (!document.getElementById('screen-assign').classList.contains('hidden')) {
             renderAssign();
         }
@@ -637,6 +689,14 @@
         newPlayerSelectedTeam = '';
         document.getElementById('btnTeamRed').classList.remove('active');
         document.getElementById('btnTeamBlue').classList.remove('active');
+        
+        // Pataisome laukelius pagal naudojamą režimą
+        if (!usePhotos) {
+            document.getElementById('newPlayerFile').classList.add('hidden');
+        } else {
+            document.getElementById('newPlayerFile').classList.remove('hidden');
+        }
+        
         document.getElementById('add-player-modal').classList.remove('hidden');
     }
 
@@ -655,8 +715,14 @@
         const fileInput = document.getElementById('newPlayerFile');
         
         if (!name) return alert("Prašome įvesti vardą!");
-        if (!fileInput.files.length) return alert("Prašome pasirinkti nuotrauką!");
         if (!newPlayerSelectedTeam) return alert("Prašome pasirinkti komandą!");
+        
+        if (!usePhotos) {
+            addPlayerToSystemMidGame(name, DEFAULT_AVATAR, newPlayerSelectedTeam);
+            return;
+        }
+
+        if (usePhotos && !fileInput.files.length) return alert("Prašome pasirinkti nuotrauką!");
 
         const file = fileInput.files[0];
         const reader = new FileReader();
@@ -674,21 +740,24 @@
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 
                 const compressedData = canvas.toDataURL('image/jpeg', 0.6);
-
-                players.push({
-                    name: name,
-                    photo: compressedData,
-                    nfcId: null, 
-                    team: newPlayerSelectedTeam, 
-                    isAlive: true,
-                    kills: 0
-                });
-                
-                db.ref('players').set(players);
-                closeAddPlayerModal();
-                alert("Žaidėjas pridėtas!");
+                addPlayerToSystemMidGame(name, compressedData, newPlayerSelectedTeam);
             };
         };
+    }
+    
+    function addPlayerToSystemMidGame(name, photoData, team) {
+        players.push({
+            name: name,
+            photo: photoData,
+            nfcId: null, 
+            team: team, 
+            isAlive: true,
+            kills: 0
+        });
+        
+        db.ref('players').set(players);
+        closeAddPlayerModal();
+        alert("Žaidėjas pridėtas!");
     }
 
     window.gmSwapTeam = function(index) {
@@ -728,9 +797,9 @@
                     <div class="gm-card-info">
                         <b style="text-decoration: ${p.isAlive ? 'none' : 'line-through'}">${p.name}</b>
                         <div class="gm-status">
-                            ${p.isAlive ? '<span style="color:var(--green)">GYVAS</span>' : '<span style="color:var(--red)">NUKAUTAS</span>'}<br>
-                            NFC: <b>${p.nfcId ? 'SUSIETAS' : 'NĖRA'}</b><br>
-                            TAŠKAI: <b style="color:var(--gold)">${p.kills || 0}</b>
+                            ${p.isAlive ? '<span style="color:var(--green)">● GYVAS</span>' : '<span style="color:var(--red)">❌ NUKAUTAS</span>'}<br>
+                            NFC: <b style="color:${p.nfcId ? 'var(--gold)' : '#555'}">${p.nfcId ? 'SUSIETAS' : 'NĖRA'}</b><br>
+                            TAŠKAI: <b style="color:white; font-size: 1.1rem;">${p.kills || 0}</b>
                         </div>
                     </div>
                 </div>
