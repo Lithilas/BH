@@ -1,144 +1,212 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="lt">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Lithilas Bounty Hunter zaidimas</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
     <style>
         :root { --red: #ff4d4d; --blue: #4d94ff; --dark: #0a0a0a; --gold: #ffd700; --green: #28a745; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--dark); color: white; margin: 0; padding: 15px; overflow-x: hidden; }
         .container { max-width: 500px; margin: auto; }
         .hidden { display: none !important; }
-        
-        /* Step 1: Enlist */
-        #drop-zone { 
-            border: 3px dashed #444; padding: 40px; text-align: center; border-radius: 12px; 
-            background: #151515; cursor: pointer; margin: 15px 0; transition: 0.3s;
+
+        input[type="text"], input[type="password"] {
+            width: 100%; padding: 15px; box-sizing: border-box; background: #222; color: white;
+            border: 1px solid #444; border-radius: 8px; font-size: 1.1rem; margin-bottom: 15px;
         }
-        #drop-zone.dragover { border-color: var(--gold); background: #222; }
-        .player-card { 
-            background: #1a1a1a; margin: 10px 0; padding: 12px; border-radius: 8px; 
+
+        /* Player cards (enlist / assign) */
+        .player-card {
+            background: #1a1a1a; margin: 10px 0; padding: 12px; border-radius: 8px;
             display: flex; align-items: center; gap: 12px; border-left: 6px solid #444;
         }
-        .player-card img { width: 60px; height: 60px; border-radius: 4px; object-fit: cover; background: #000; flex-shrink: 0; }
-        
+
         /* Buttons */
         .action-btn { background: var(--gold); color: black; padding: 18px; border: none; font-weight: bold; width: 100%; cursor: pointer; border-radius: 8px; font-size: 1.1rem; margin-top: 10px; transition: 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
         .action-btn:active { transform: scale(0.98); }
         .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .team-btn { padding: 12px; border: none; color: white; opacity: 0.2; cursor: pointer; font-weight: bold; flex: 1; border-radius: 4px; transition: 0.2s; }
         .team-btn.active { opacity: 1; outline: 2px solid white; transform: scale(1.05); }
-        
+        .link-btn { background: none; border: none; color: #888; text-decoration: underline; cursor: pointer; margin-top: 15px; font-size: 0.9rem; width: 100%; }
+
         /* Game UI */
         #timer { font-size: 4rem; text-align: center; color: var(--gold); font-family: monospace; font-weight: bold; margin: 15px 0; text-shadow: 0 0 10px rgba(255,215,0,0.3); }
         .target-frame { border: 4px solid var(--gold); padding: 15px; text-align: center; background: #000; border-radius: 12px; box-shadow: 0 8px 15px rgba(0,0,0,0.5); }
-        .target-img { width: 160px; height: 160px; object-fit: cover; border: 2px solid #333; border-radius: 12px; margin: 0 auto; display: block; }
-        
-        /* PATOBULINTAS GM Dashboard */
+        .score-strip { display: flex; justify-content: space-between; background: #111; padding: 12px; border-radius: 8px; border: 1px solid #333; margin-bottom: 15px; font-size: 1.1rem; font-weight: bold; }
+        .me-bar { display: flex; justify-content: space-between; background: #151515; padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; border-left: 5px solid #444; }
+        .lbl { font-size: 0.8rem; color: #aaa; letter-spacing: 1px; }
+
+        /* GM Dashboard */
         #gm-player-list { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
-        .gm-card { 
-            background: #1e1e1e; padding: 12px; border-radius: 10px; 
+        .gm-card {
+            background: #1e1e1e; padding: 12px; border-radius: 10px;
             display: flex; flex-direction: column; gap: 10px; border-left: 6px solid #444;
             font-size: 0.9rem; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.4);
-            position: relative;
         }
-        .gm-card-top { display: flex; align-items: center; gap: 12px; }
-        .gm-card img { width: 45px; height: 45px; border-radius: 6px; object-fit: cover; flex-shrink: 0; border: 1px solid #333; }
         .gm-card-info { display: flex; flex-direction: column; overflow: hidden; flex: 1; }
         .gm-card-info b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 1rem; color: #fff; }
         .gm-status { font-size: 0.8rem; color: #ccc; background: #111; padding: 6px; border-radius: 6px; margin-top: 5px; line-height: 1.5; border: 1px solid #222; }
-        .gm-actions { display: flex; gap: 8px; width: 100%; margin-top: auto; }
-        .gm-btn { flex: 1; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 0.75rem; font-weight: bold; transition: 0.2s; text-transform: uppercase; letter-spacing: 0.5px; }
+        .gm-actions { display: flex; gap: 6px; width: 100%; margin-top: auto; }
+        .gm-btn { flex: 1; border: none; padding: 8px 4px; border-radius: 6px; cursor: pointer; font-size: 0.7rem; font-weight: bold; transition: 0.2s; text-transform: uppercase; letter-spacing: 0.3px; }
         .gm-btn:hover { filter: brightness(1.2); }
-        
+
+        /* Kill feed */
+        .feed { background: #111; border: 1px solid #222; border-radius: 8px; padding: 8px 12px; max-height: 260px; overflow-y: auto; font-size: 0.9rem; }
+        .feed-line { padding: 5px 0; border-bottom: 1px solid #1c1c1c; line-height: 1.4; }
+        .feed-line:last-child { border-bottom: none; }
+        .feed-line.miss { opacity: 0.55; font-size: 0.8rem; }
+        .ft { color: #888; font-family: monospace; margin-right: 6px; }
+        .fk { color: var(--red); font-size: 0.75rem; font-weight: bold; margin-left: 4px; }
+        .feed-empty { color: #666; padding: 8px 0; }
+
+        /* Results */
+        .winner-banner { text-align: center; padding: 20px; border-radius: 12px; background: #111; border: 3px solid var(--gold); margin: 15px 0; }
+        .board-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #1a1a1a; border-radius: 8px; margin: 6px 0; border-left: 6px solid #444; }
+        .board-row .rank { width: 28px; color: #888; font-family: monospace; }
+        .board-row .nm { flex: 1; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
         /* NFC Scan Anim */
         .scanning { animation: pulse 1.5s infinite; background-color: #333 !important; color: var(--gold) !important; }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+        /* Modals */
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+        .modal-box { background: #151515; padding: 25px; border-radius: 12px; border: 2px solid var(--gold); text-align: center; width: 90%; max-width: 400px; box-sizing: border-box; }
+
+        /* Toast */
+        #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%) translateY(120px); background: #222; color: white; border: 2px solid var(--gold); padding: 14px 20px; border-radius: 10px; z-index: 10000; max-width: 90%; text-align: center; opacity: 0; transition: 0.3s; pointer-events: none; }
+        #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+        #toast.err { border-color: var(--red); }
     </style>
 </head>
 <body>
 <div class="container">
-    <div id="screen-setup" class="hidden">
-        <h2 style="color:var(--gold); text-align:center; margin-top:50px; margin-bottom: 30px;">ŽAIDIMO NUSTATYMAI</h2>
-        <button class="action-btn" style="background:var(--blue); color:white; margin-bottom: 15px;" onclick="selectGameMode(true)">ŽAISTI SU NUOTRAUKOMIS</button>
-        <button class="action-btn" style="background:#444; color:white;" onclick="selectGameMode(false)">GREITAS ŽAIDIMAS (BE NUOTRAUKŲ)</button>
+
+    <!-- Role picker (shown when the URL has no valid ?role=) -->
+    <div id="screen-role" class="screen hidden">
+        <h2 style="color:var(--gold); text-align:center; margin-top:50px; margin-bottom: 30px;">PASIRINKITE ROLĘ</h2>
+        <a href="?role=RAUDONA" style="text-decoration:none"><button class="action-btn" style="background:var(--red); color:white;">RAUDONA KOMANDA</button></a>
+        <a href="?role=MELYNA" style="text-decoration:none"><button class="action-btn" style="background:var(--blue); color:white;">MĖLYNA KOMANDA</button></a>
+        <a href="?role=GM" style="text-decoration:none"><button class="action-btn" style="background:#444; color:white;">ŽAIDIMO VEDĖJAS (GM)</button></a>
     </div>
 
-    <div id="screen-enlist" class="hidden">
-        <h2 style="color:var(--gold)">PRIDĖTI ŽAIDĖJUS</h2>
-        <input type="text" id="nameInput" placeholder="ĮRAŠYTI NICK'Ą" style="width: 100%; padding: 15px; box-sizing: border-box; background: #222; color: white; border: 1px solid #444; border-radius: 8px; font-size: 1.1rem; margin-bottom: 15px;">
-        
-        <button id="btnQuickAdd" class="action-btn hidden" style="background:var(--green); color:white; margin-bottom:15px; margin-top:0;" onclick="quickAddPlayer()">PRIDĖTI ŽAIDĖJĄ</button>
+    <!-- GM PIN -->
+    <div id="screen-pin" class="screen hidden">
+        <h2 id="pin-title" style="color:var(--gold); text-align:center; margin-top:50px;"></h2>
+        <p id="pin-text" style="text-align:center; color:#aaa; margin-bottom:20px;"></p>
+        <input type="password" id="pinInput" placeholder="PIN" autocomplete="off">
+        <input type="password" id="pinInput2" class="hidden" placeholder="PAKARTOKITE PIN" autocomplete="off">
+        <button id="pinBtn" class="action-btn" onclick="submitPin()">PRISIJUNGTI</button>
+    </div>
 
-        <div id="drop-zone">
-            <b style="font-size: 1.2rem;">Įtempti foto</b><br>
-            <small>ARBA PASIRINKTI NAUJĄ FOTO</small>
-        </div>
-        <input type="file" id="fileInput" class="hidden" accept="image/*">
-        
+    <!-- Waiting (non-GM) -->
+    <div id="screen-wait" class="screen hidden">
+        <h2 id="wait-title" style="text-align: center; margin-top: 100px;">LAUKIAME STARTO</h2>
+        <p id="wait-text" style="text-align:center; color:#aaa;"></p>
+    </div>
+
+    <!-- GM: add players -->
+    <div id="screen-enlist" class="screen hidden">
+        <h2 style="color:var(--gold)">PRIDĖTI ŽAIDĖJUS</h2>
+        <input type="text" id="nameInput" placeholder="ĮRAŠYTI NICK'Ą" maxlength="20" autocomplete="off">
+        <button class="action-btn" style="background:var(--green); color:white; margin-top:0;" onclick="addPlayerEnlist()">PRIDĖTI ŽAIDĖJĄ</button>
         <div id="playerList"></div>
         <button class="action-btn" onclick="navToAssign()">PRISKIRTI KOMANDAI</button>
     </div>
 
-    <div id="screen-assign" class="hidden">
+    <!-- GM: assign teams -->
+    <div id="screen-assign" class="screen hidden">
         <h2>PRISKIRTI KOMANDAI</h2>
+        <div id="assign-score"></div>
         <div id="assignList"></div>
-        <button class="action-btn" style="background:var(--green)" onclick="startNFCSetup()">PEREITI PRIE NFC SUSIEJIMO</button>
+        <button class="action-btn" style="background:#444; color:white;" onclick="navToEnlist()">← ATGAL Į ŽAIDĖJUS</button>
+        <button class="action-btn" style="background:var(--green); color:white;" onclick="startNFCSetup()">PEREITI PRIE NFC SUSIEJIMO</button>
     </div>
 
-    <div id="screen-nfc-setup" class="hidden">
+    <!-- NFC linking -->
+    <div id="screen-nfc" class="screen hidden">
         <h2 style="color:var(--gold); text-align:center;">NFC ŽYMIŲ SUSIEJIMAS</h2>
-        <div id="nfc-setup-content" class="target-frame" style="margin-top:20px;">
-            </div>
+        <div id="nfc-setup-content" class="target-frame" style="margin-top:20px;"></div>
     </div>
 
-    <div id="screen-wait" class="hidden">
-        <h2 style="text-align: center; margin-top: 100px;">LAUKIAME STARTO</h2>
-    </div>
-
-    <div id="screen-game" class="hidden">
+    <!-- Game (players + GM) -->
+    <div id="screen-game" class="screen hidden">
         <div id="timer">105:00</div>
-        
-        <div id="player-score" style="margin-bottom: 15px;"></div>
+        <div id="score-strip" class="score-strip"></div>
 
-        <div id="hunt-ui" class="target-frame">
-            </div>
+        <div id="player-area"></div>
 
-        <div id="gm-dashboard" class="hidden">
+        <div id="gm-area" class="hidden">
             <h2 style="color:var(--gold); text-align:center; margin-bottom:5px;">GYVŲ ŽAIDĖJŲ SĄRAŠAS</h2>
-            <div id="gm-score"></div>
+            <div id="gm-targets"></div>
             <div id="gm-player-list"></div>
-            
+
             <button id="btnStartTimer" class="action-btn" style="background:var(--gold); color:black; margin-top:30px;" onclick="startGlobalTimer()">PRADĖTI LAIKĄ</button>
+            <button id="btnEndGame" class="action-btn" style="background:#a00; color:white; margin-top:10px;" onclick="gmEndGame()">BAIGTI ŽAIDIMĄ</button>
             <button class="action-btn" style="background:var(--green); color:white; margin-top:10px;" onclick="openAddPlayerModal()">PRIDĖTI NAUJĄ ŽAIDĖJĄ</button>
-            <button class="action-btn" style="background:var(--blue); color:white; margin-top:10px;" onclick="newRound()">NAUJAS RAUNDAS</button>
+            <button class="action-btn" style="background:var(--blue); color:white; margin-top:10px;" onclick="newRoundKeep()">NAUJAS RAUNDAS (TOS PAČIOS NFC ŽYMĖS)</button>
+            <button class="action-btn" style="background:#335; color:white; margin-top:10px;" onclick="newRoundWipe()">NAUJAS RAUNDAS (IŠTRINTI NFC)</button>
+            <button class="action-btn" style="background:var(--red); color:white; margin-top:10px;" onclick="resetGame()">VISKĄ IŠTRINTI</button>
+        </div>
+
+        <h3 style="color:var(--gold); margin-top:25px; margin-bottom:8px;">NUKAVIMŲ ŽURNALAS</h3>
+        <div id="feed" class="feed"></div>
+    </div>
+
+    <!-- Results -->
+    <div id="screen-end" class="screen hidden">
+        <h2 style="color:var(--gold); text-align:center; margin-top:20px; margin-bottom:0;">ŽAIDIMAS BAIGTAS</h2>
+        <div id="end-summary"></div>
+        <h3 style="color:var(--gold); margin-bottom:8px;">TAŠKŲ LENTELĖ</h3>
+        <div id="end-board"></div>
+        <h3 style="color:var(--gold); margin-top:25px; margin-bottom:8px;">NUKAVIMŲ ŽURNALAS</h3>
+        <div id="end-feed" class="feed"></div>
+        <div id="end-wait" style="text-align:center; color:#aaa; margin-top:25px;">Laukite, kol GM pradės naują raundą.</div>
+        <div id="end-gm" class="hidden">
+            <button class="action-btn" style="background:var(--blue); color:white; margin-top:25px;" onclick="newRoundKeep()">NAUJAS RAUNDAS (TOS PAČIOS NFC ŽYMĖS)</button>
+            <button class="action-btn" style="background:#335; color:white; margin-top:10px;" onclick="newRoundWipe()">NAUJAS RAUNDAS (IŠTRINTI NFC)</button>
             <button class="action-btn" style="background:var(--red); color:white; margin-top:10px;" onclick="resetGame()">VISKĄ IŠTRINTI</button>
         </div>
     </div>
 </div>
 
-<div id="killer-modal" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); display:flex; align-items:center; justify-content:center; z-index:9999;">
-    <div style="background:#151515; padding:25px; border-radius:12px; border:2px solid var(--gold); text-align:center; width:90%; max-width:400px; box-sizing:border-box;">
+<!-- Generic confirmation modal (optionally requires typing a word) -->
+<div id="confirm-modal" class="modal hidden">
+    <div class="modal-box">
+        <h3 id="cm-title" style="color:var(--gold); margin-top:0;"></h3>
+        <p id="cm-text" style="font-size:1rem; margin-bottom:15px;"></p>
+        <div id="cm-typebox" class="hidden">
+            <p id="cm-hint" style="font-size:0.9rem; color:#aaa; margin:0 0 8px 0;"></p>
+            <input type="text" id="cm-input" autocomplete="off" autocapitalize="characters">
+        </div>
+        <div style="display:flex; gap:10px;">
+            <button class="action-btn" style="background:#555; color:white; margin:0;" onclick="closeConfirm()">ATŠAUKTI</button>
+            <button id="cm-ok" class="action-btn" style="margin:0;" onclick="confirmOk()">TAIP</button>
+        </div>
+    </div>
+</div>
+
+<!-- Killer confirmation (second scan) -->
+<div id="killer-modal" class="modal hidden">
+    <div class="modal-box">
         <h3 style="color:var(--gold); margin-top:0;">TAIKINYS NUKAUTAS!</h3>
-        <p style="font-size:1rem; margin-bottom:15px;">Nuskenuokite SAVO (žudiko) NFC tag'ą, kad gautumėte tašką:</p>
-        
+        <p id="killer-target" style="font-size:1.4rem; font-weight:bold; margin:5px 0 15px 0;"></p>
+        <p style="font-size:1rem; margin-bottom:15px;">Nuskenuokite SAVO (žudiko) NFC žymę, kad gautumėte tašką:</p>
         <button id="btnScanKiller" class="action-btn" style="background:var(--green); color:white; margin-bottom:20px;" onclick="scanKillerNFC()">NUSKENUOTI SAVO NFC</button>
-        
         <div style="display:flex; gap:10px;">
             <button class="action-btn" style="background:#555; color:white; margin:0;" onclick="closeKillerModal()">ATŠAUKTI</button>
         </div>
     </div>
 </div>
 
-<div id="add-player-modal" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); display:flex; align-items:center; justify-content:center; z-index:9999;">
-    <div style="background:#151515; padding:25px; border-radius:12px; border:2px solid var(--gold); text-align:center; width:90%; max-width:400px; box-sizing:border-box;">
+<!-- Add player mid-game -->
+<div id="add-player-modal" class="modal hidden">
+    <div class="modal-box">
         <h3 style="color:var(--gold); margin-top:0;">PRIDĖTI NAUJĄ ŽAIDĖJĄ</h3>
-        <input type="text" id="newPlayerName" placeholder="ĮRAŠYTI NICK'Ą" style="width: 100%; padding: 15px; box-sizing: border-box; background: #222; color: white; border: 1px solid #444; border-radius: 8px; font-size: 1.1rem; margin-bottom: 15px;">
-        
-        <input type="file" id="newPlayerFile" accept="image/*" style="width: 100%; margin-bottom: 15px; color: white; font-size: 1rem;">
-        
+        <input type="text" id="newPlayerName" placeholder="ĮRAŠYTI NICK'Ą" maxlength="20" autocomplete="off">
         <div style="display:flex; gap:5px; margin-bottom: 20px;">
             <button id="btnTeamRed" class="team-btn" style="background:var(--red)" onclick="selectNewPlayerTeam('RAUDONA')">RED</button>
             <button id="btnTeamBlue" class="team-btn" style="background:var(--blue)" onclick="selectNewPlayerTeam('MELYNA')">BLUE</button>
@@ -147,669 +215,1007 @@
             <button class="action-btn" style="background:#555; color:white; margin:0;" onclick="closeAddPlayerModal()">ATŠAUKTI</button>
             <button class="action-btn" style="background:var(--green); color:white; margin:0;" onclick="confirmAddPlayer()">PRIDĖTI</button>
         </div>
+        <p style="font-size:0.8rem; color:#888; margin-bottom:0;">Po pridėjimo susiekite žaidėjo NFC žymę jo kortelėje (mygtukas „NFC“).</p>
     </div>
 </div>
 
+<div id="toast"></div>
+
 <script>
-    const firebaseConfig = {
-        apiKey: "AIzaSyB1aSPG4BKYghWw2KKq_Ri4oqRbDeh4t_8",
-        authDomain: "lithilas-bh.firebaseapp.com",
-        databaseURL: "https://lithilas-bh-default-rtdb.europe-west1.firebasedatabase.app",
-        projectId: "lithilas-bh",
-        storageBucket: "lithilas-bh.firebasestorage.app",
-        messagingSenderId: "971183564853",
-        appId: "1:971183564853:web:2772ee6826ba1fa54d297c",
-        measurementId: "G-Y6FSWJD169"
-    };
+/* ==========================================================================
+   DUOMENŲ STRUKTŪRA (Firebase Realtime Database)
+   gameStatus: { phase: 'enlist'|'nfc'|'game'|'ended', startTime, duration, endTime, endReason }
+   players/{id}: { name, team, nfcId, isAlive, kills, joined, killedBy, diedAt }
+   log/{pushId}: { type:'kill'|'miss', hunterId?, hunterName?, hunterTeam, targetId?, targetName?, targetTeam?, t }
+   config/gmPinHash: SHA-256 GM PIN kodo santrauka
+   gameStatus/targets: { RAUDONA: <priešo žaidėjo id>, MELYNA: <priešo žaidėjo id> }
+   – kiekviena komanda medžioja VIENĄ atsitiktinį gyvą priešininką. Nukovus,
+   komanda gauna naują atsitiktinį gyvą priešininką.
+   ========================================================================== */
 
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-    let players = []; 
-    let myRole = new URLSearchParams(window.location.search).get('role') || 'GM';
-    let timerInterval;
-    let newPlayerSelectedTeam = '';
-    
-    // Nustatymai
-    let usePhotos = true;
-    const DEFAULT_AVATAR = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjMmEyYTJhIi8+PGNpcmNsZSBjeD0iNTAiIGN5PSI0MCIgcj0iMjIiIGZpbGw9IiM1NTUiLz48cGF0aCBkPSJNMjAgMTAwIEMyMCA1NSA4MCA1NSA4MCAxMDAiIGZpbGw9IiM1NTUiLz48L3N2Zz4=";
-    
-    let ndefInstance = null;
-    let activeNfcCallback = null;
+const firebaseConfig = {
+    apiKey: "AIzaSyB1aSPG4BKYghWw2KKq_Ri4oqRbDeh4t_8",
+    authDomain: "lithilas-bh.firebaseapp.com",
+    databaseURL: "https://lithilas-bh-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "lithilas-bh",
+    storageBucket: "lithilas-bh.firebasestorage.app",
+    messagingSenderId: "971183564853",
+    appId: "1:971183564853:web:2772ee6826ba1fa54d297c",
+    measurementId: "G-Y6FSWJD169"
+};
 
-    // Kadangi startas kontroliuojamas per firebase, langų rodymas tvarkomas db on('value') viduje.
+const DEFAULT_DURATION = 6300;   // 105 min
+const PENALTY_SECONDS = 15;
+const KILL_IDLE_TEXT = "NUSKAITYTI TAIKINIO NFC (PATVIRTINTI)";
+const ROLES = ['GM', 'RAUDONA', 'MELYNA'];
 
-    const dz = document.getElementById('drop-zone');
-    const fi = document.getElementById('fileInput');
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-    if(dz) dz.onclick = () => fi.click();
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => {
-        if(dz) dz.addEventListener(e, (ev) => { ev.preventDefault(); ev.stopPropagation(); });
-    });
-    if(dz) dz.addEventListener('dragover', () => dz.classList.add('dragover'));
-    if(dz) dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+/* ---------- Būsena ---------- */
+const params = new URLSearchParams(window.location.search);
+let myRole = (params.get('role') || '').toUpperCase();
+if (!ROLES.includes(myRole)) myRole = null;
 
-    if(dz) dz.addEventListener('drop', (e) => {
-        dz.classList.remove('dragover');
-        if (e.dataTransfer.files.length) processFile(e.dataTransfer.files[0]);
-    });
-    if(fi) fi.onchange = (e) => { if (e.target.files.length) processFile(e.target.files[0]); };
+let status = {};
+let players = [];
+let logs = [];
+let serverOffset = 0;
+let pinHashInDb = undefined;      // undefined = kraunama, null = nėra, string = yra
+let enlistStep = 'enlist';        // GM: 'enlist' | 'assign'
+let newPlayerSelectedTeam = '';
+let endRequested = false;
+let confirmState = null;
 
-    // Nauja funkcija režimo parinkimui
-    window.selectGameMode = function(withPhotos) {
-        db.ref('gameStatus').update({ modeSelected: true, usePhotos: withPhotos });
-    };
+/* ---------- Pagalbinės funkcijos ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const now = () => Date.now() + serverOffset;
+const phase = () => status.phase || 'enlist';
+const teamColor = t => t === 'RAUDONA' ? 'var(--red)' : t === 'MELYNA' ? 'var(--blue)' : '#444';
+const teamLabel = t => t === 'RAUDONA' ? 'RAUDONA' : t === 'MELYNA' ? 'MĖLYNA' : '—';
+const nameSpan = (n, t) => `<b style="color:${teamColor(t)}">${esc(n)}</b>`;
+const isGM = () => myRole === 'GM' && !!pinHashInDb && sessionStorage.getItem('bh_gmHash') === pinHashInDb;
+const dbError = err => { console.error(err); toast('Nepavyko pasiekti duomenų bazės (patikrinkite ryšį ir Firebase taisykles).', true, 6000); };
 
-    window.quickAddPlayer = function() {
-        const nameVal = document.getElementById('nameInput').value.trim();
-        if (!nameVal) return alert("Prašome įvesti vardą!");
-        
-        addPlayerToSystem(nameVal, DEFAULT_AVATAR);
-        document.getElementById('nameInput').value = '';
+function fmt(sec) {
+    const m = Math.floor(sec / 60), s = sec % 60;
+    return m + ':' + (s < 10 ? '0' : '') + s;
+}
+function fmtElapsed(t) {
+    if (!status.startTime || !t) return '--:--';
+    return fmt(Math.max(0, Math.floor((t - status.startTime) / 1000)));
+}
+
+let toastTimer;
+function toast(msg, isErr, ms) {
+    const t = $('toast');
+    t.innerText = msg;
+    t.className = 'show' + (isErr ? ' err' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.className = ''; }, ms || 3000);
+}
+
+function show(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+    $(id).classList.remove('hidden');
+}
+function waitScreen(title, text) {
+    $('wait-title').innerText = title;
+    $('wait-text').innerText = text || '';
+    show('screen-wait');
+}
+
+/* ---------- Patvirtinimo langas ---------- */
+const normWord = s => String(s).trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+function askConfirm(opts) {
+    confirmState = opts;
+    $('cm-title').innerText = opts.title;
+    $('cm-text').innerText = opts.text || '';
+    const typed = !!opts.typeWord;
+    $('cm-typebox').classList.toggle('hidden', !typed);
+    $('cm-input').value = '';
+    if (typed) $('cm-hint').innerText = `Įrašykite „${opts.typeWord}“, kad patvirtintumėte:`;
+    const ok = $('cm-ok');
+    ok.innerText = opts.okLabel || 'TAIP';
+    ok.style.background = opts.danger ? 'var(--red)' : 'var(--gold)';
+    ok.style.color = opts.danger ? 'white' : 'black';
+    ok.disabled = typed;
+    $('confirm-modal').classList.remove('hidden');
+}
+$('cm-input').addEventListener('input', () => {
+    if (confirmState && confirmState.typeWord) {
+        $('cm-ok').disabled = normWord($('cm-input').value) !== normWord(confirmState.typeWord);
     }
+});
+function closeConfirm() {
+    $('confirm-modal').classList.add('hidden');
+    confirmState = null;
+}
+function confirmOk() {
+    const st = confirmState;
+    if (!st) return;
+    if (st.typeWord && normWord($('cm-input').value) !== normWord(st.typeWord)) return;
+    closeConfirm();
+    if (st.onOk) st.onOk();
+}
 
-    function processFile(file) {
-        const nameVal = document.getElementById('nameInput').value.trim();
-        if (!nameVal) {
-            document.getElementById('fileInput').value = ''; 
-            return alert("Prašome pirma įvesti vardą!");
-        }
+/* ==========================================================================
+   NFC
+   ========================================================================== */
+let ndefReader = null;
+let nfcWait = null;   // { btnId, idleText, waitText, cb }
 
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = (event) => {
-            const img = new Image();
-            img.src = event.target.result;
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const MAX_WIDTH = 500;
-                const scale = MAX_WIDTH / img.width;
-                canvas.width = MAX_WIDTH;
-                canvas.height = img.height * scale;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                
-                const compressedData = canvas.toDataURL('image/jpeg', 0.6);
-                addPlayerToSystem(nameVal, compressedData);
-                
-                document.getElementById('nameInput').value = '';
-                document.getElementById('fileInput').value = ''; 
-            };
+async function ensureNFC() {
+    if (!('NDEFReader' in window)) {
+        toast("Jūsų naršyklė nepalaiko Web NFC! Naudokite Chrome Android telefone per HTTPS.", true, 6000);
+        return false;
+    }
+    if (ndefReader) return true;
+    try {
+        const r = new NDEFReader();
+        r.onreading = ev => handleTag(ev.serialNumber);
+        r.onreadingerror = () => {
+            cancelNfcWait();
+            toast("Klaida nuskaitant žymę. Bandykite dar kartą.", true);
         };
+        await r.scan();
+        ndefReader = r;      // išsaugome tik kai pavyko – kitaip kitas bandymas vėl pabandys
+        return true;
+    } catch (e) {
+        console.error(e);
+        cancelNfcWait();
+        toast("Nepavyko paleisti NFC skaitytuvo. Patikrinkite, ar NFC įjungtas ir ar suteikėte leidimą.", true, 6000);
+        return false;
+    }
+}
+
+function handleTag(serial) {
+    if (!nfcWait) return;
+    const w = nfcWait;
+    clearNfcWaitState();
+    w.cb(serial);
+}
+function clearNfcWaitState() {
+    if (!nfcWait) return;
+    const b = $(nfcWait.btnId);
+    if (b) { b.innerText = nfcWait.idleText; b.classList.remove('scanning'); }
+    nfcWait = null;
+}
+function cancelNfcWait() { clearNfcWaitState(); }
+
+function applyNfcWaitUI() {
+    if (!nfcWait) return;
+    const b = $(nfcWait.btnId);
+    if (!b) { nfcWait = null; return; }   // mygtukas išnyko (pasikeitė ekranas) – atšaukiame
+    b.innerText = nfcWait.waitText;
+    b.classList.add('scanning');
+}
+
+// Spaudžiant tą patį mygtuką antrą kartą – skenavimas atšaukiamas.
+async function waitForTag(btnId, idleText, waitText, cb) {
+    if (nfcWait && nfcWait.btnId === btnId) { cancelNfcWait(); return; }
+    cancelNfcWait();
+    const ok = await ensureNFC();
+    if (!ok) return;
+    nfcWait = { btnId, idleText, waitText, cb };
+    applyNfcWaitUI();
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) cancelNfcWait(); });
+
+/* ==========================================================================
+   TAIKINIAI: kiekviena komanda medžioja vieną atsitiktinį gyvą priešininką
+   ========================================================================== */
+function pickTarget(list) {
+    if (!list.length) return null;
+    const tagged = list.filter(p => p.nfcId);          // pirmenybė žaidėjams su NFC žyme
+    const pool = tagged.length ? tagged : list;
+    return pool[Math.floor(Math.random() * pool.length)];
+}
+const aliveEnemies = team => players.filter(p => p.team && p.team !== team && p.isAlive);
+
+function getTeamTarget(team) {
+    const id = status.targets && status.targets[team];
+    if (!id) return null;
+    const p = players.find(x => x.id === id);
+    return (p && p.isAlive && p.team !== team) ? p : null;
+}
+
+// Jei komandos taikinys nebegalioja (nukautas, pašalintas, pakeista komanda) –
+// paskiriamas naujas atsitiktinis. Tai gali bandyti bet kuris telefonas; transakcija
+// užtikrina, kad pakeitimą atlieka tik pirmasis.
+const targetFix = {};
+function ensureTargets() {
+    if (phase() !== 'game' || !players.length) return;
+    ['RAUDONA', 'MELYNA'].forEach(team => {
+        if (targetFix[team] || getTeamTarget(team)) return;
+        const cand = pickTarget(aliveEnemies(team));
+        if (!cand) return;
+        const old = (status.targets && status.targets[team]) || null;
+        targetFix[team] = true;
+        db.ref('gameStatus/targets/' + team).transaction(cur => {
+            if (cur === null && old !== null) return cur;   // dar neužkrauta – Firebase pakartos
+            return cur === old ? cand.id : undefined;       // keičiame tik jei niekas kitas nepakeitė
+        }).catch(() => {}).then(() => { targetFix[team] = false; });
+    });
+}
+
+const hasBothTeams = () => players.some(p => p.team === 'RAUDONA') && players.some(p => p.team === 'MELYNA');
+
+/* ==========================================================================
+   LAIKAS
+   ========================================================================== */
+function remainingSec() {
+    if (!status.startTime) return null;
+    const dur = status.duration || DEFAULT_DURATION;
+    return dur - Math.floor((now() - status.startTime) / 1000);
+}
+function isRunning() {
+    if (phase() !== 'game' || !status.startTime) return false;
+    if (now() < status.startTime) return false;
+    return remainingSec() > 0;
+}
+
+function updateTimerText() {
+    const t = $('timer');
+    if (!t) return;
+    const dur = status.duration || DEFAULT_DURATION;
+    const rem = remainingSec();
+    if (phase() === 'game' && rem !== null) {
+        t.innerText = fmt(Math.max(0, Math.min(dur, rem)));
+        t.style.color = rem <= 60 ? 'var(--red)' : 'var(--gold)';
+    } else {
+        t.innerText = fmt(dur);
+        t.style.color = 'var(--gold)';
+    }
+}
+
+function autoEndCheck() {
+    if (phase() !== 'game') { endRequested = false; return; }
+    const rem = remainingSec();
+    if (rem !== null && rem <= 0 && !endRequested) {
+        endRequested = true;
+        endGame('time');
+    }
+}
+
+function endGame(reason) {
+    return db.ref('gameStatus').transaction(s => {
+        if (!s) return s;                      // dar neužkrauta – Firebase pakartos su tikra reikšme
+        if (s.phase !== 'game') return;        // jau pasibaigė – nutraukiame
+        s.phase = 'ended';
+        s.endReason = reason;
+        s.endTime = now();
+        return s;
+    }).catch(() => { endRequested = false; });
+}
+
+setInterval(() => {
+    updateTimerText();
+    updateKillBtn();
+    autoEndCheck();
+}, 1000);
+
+/* ==========================================================================
+   NUBAUDA UŽ KLAIDINGĄ NUSKENAVIMĄ (išlieka po perkrovimo)
+   ========================================================================== */
+const blockedUntil = () => parseInt(localStorage.getItem('bh_blockedUntil') || '0', 10) || 0;
+function applyPenalty() {
+    localStorage.setItem('bh_blockedUntil', String(now() + PENALTY_SECONDS * 1000));
+    updateKillBtn();
+}
+function updateKillBtn() {
+    const b = $('killBtn');
+    if (!b) return;
+    const left = Math.ceil((blockedUntil() - now()) / 1000);
+    if (left > 0) {
+        if (nfcWait && nfcWait.btnId === 'killBtn') cancelNfcWait();
+        b.disabled = true;
+        b.style.background = '#555';
+        b.innerText = `BLOKUOTA (${left}s)`;
+    } else if (b.disabled) {
+        b.disabled = false;
+        b.style.background = '#a00';
+        if (!(nfcWait && nfcWait.btnId === 'killBtn')) b.innerText = KILL_IDLE_TEXT;
+    }
+}
+
+/* ==========================================================================
+   GM PIN
+   ========================================================================== */
+async function hashPin(pin) {
+    const salted = 'lithilas:' + pin;
+    if (window.crypto && crypto.subtle) {
+        const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(salted));
+        return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    return 'p' + Array.from(salted).reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 7);
+}
+
+async function submitPin() {
+    if (pinHashInDb === undefined) return;
+    const pin = $('pinInput').value.trim();
+    try {
+        if (pinHashInDb === null) {
+            if (pin.length < 4) return toast('PIN turi būti bent 4 simbolių.', true);
+            if (pin !== $('pinInput2').value.trim()) return toast('PIN kodai nesutampa.', true);
+            const h = await hashPin(pin);
+            const res = await db.ref('config/gmPinHash').transaction(cur => cur === null ? h : undefined);
+            if (!res.committed) return toast('PIN jau sukurtas – įveskite jį.', true);
+            sessionStorage.setItem('bh_gmHash', h);
+        } else {
+            const h = await hashPin(pin);
+            if (h !== pinHashInDb) return toast('Neteisingas PIN.', true);
+            sessionStorage.setItem('bh_gmHash', h);
+        }
+        $('pinInput').value = '';
+        $('pinInput2').value = '';
+        render();
+    } catch (e) {
+        dbError(e);
+    }
+}
+$('pinInput').addEventListener('keydown', e => { if (e.key === 'Enter' && pinHashInDb !== null) submitPin(); });
+$('pinInput2').addEventListener('keydown', e => { if (e.key === 'Enter') submitPin(); });
+
+function renderPin() {
+    const loading = pinHashInDb === undefined;
+    const create = pinHashInDb === null;
+    $('pin-title').innerText = create ? 'SUKURKITE GM PIN KODĄ' : 'GM PRIEIGA';
+    $('pin-text').innerText = loading ? 'Kraunama...'
+        : create ? 'Šis kodas apsaugos žaidimo vedėjo valdymą. Mažiausiai 4 simboliai.'
+        : 'Įveskite GM PIN kodą.';
+    $('pinInput2').classList.toggle('hidden', !create);
+    $('pinBtn').innerText = create ? 'SUKURTI PIN' : 'PRISIJUNGTI';
+    $('pinBtn').disabled = loading;
+}
+
+/* ==========================================================================
+   ŽAIDĖJŲ PRIDĖJIMAS (enlist / assign)
+   ========================================================================== */
+function validName(name) {
+    if (!name) { toast('Prašome įvesti vardą!', true); return false; }
+    if (players.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+        toast('Toks vardas jau yra!', true);
+        return false;
+    }
+    return true;
+}
+
+function addPlayerEnlist() {
+    if (!isGM()) return;
+    const name = $('nameInput').value.trim();
+    if (!validName(name)) return;
+    db.ref('players').push({
+        name: name, team: '', isAlive: true, kills: 0, joined: now()
+    }).catch(dbError);
+    $('nameInput').value = '';
+    $('nameInput').focus();
+}
+$('nameInput').addEventListener('keydown', e => { if (e.key === 'Enter') addPlayerEnlist(); });
+
+function renderEnlist() {
+    $('playerList').innerHTML = players.length ? players.map(p => `
+        <div class="player-card">
+            <b style="flex:1">${esc(p.name)}</b>
+            <button class="gm-btn" style="flex:0 0 auto; padding:10px; background:var(--red); color:white;" onclick="gmDeletePlayer('${p.id}')">ŠALINTI</button>
+        </div>`).join('')
+        : '<p style="color:#666;">Žaidėjų dar nėra.</p>';
+}
+
+function navToAssign() {
+    if (!isGM()) return;
+    if (players.length === 0) return toast('Pirma pridėkite žaidėjų!', true);
+    enlistStep = 'assign';
+    render();
+}
+function navToEnlist() {
+    enlistStep = 'enlist';
+    render();
+}
+
+function renderAssign() {
+    const red = players.filter(p => p.team === 'RAUDONA').length;
+    const blue = players.filter(p => p.team === 'MELYNA').length;
+    $('assign-score').innerHTML = `
+        <div class="score-strip">
+            <span style="color:var(--red)">RAUDONI: ${red}</span>
+            <span style="color:var(--blue)">MĖLYNI: ${blue}</span>
+        </div>`;
+    $('assignList').innerHTML = players.map(p => `
+        <div class="player-card" style="border-left-color:${teamColor(p.team)}">
+            <b style="flex:1; overflow:hidden; text-overflow:ellipsis;">${esc(p.name)}</b>
+            <div style="display:flex; gap:5px; align-items:center;">
+                <button class="team-btn ${p.team === 'RAUDONA' ? 'active' : ''}" style="background:var(--red)" onclick="setTeam('${p.id}','RAUDONA')">RED</button>
+                <button class="team-btn ${p.team === 'MELYNA' ? 'active' : ''}" style="background:var(--blue)" onclick="setTeam('${p.id}','MELYNA')">BLUE</button>
+                <button class="gm-btn" style="flex:0 0 auto; background:var(--red); color:white; padding:10px;" onclick="gmDeletePlayer('${p.id}')">ŠALINTI</button>
+            </div>
+        </div>`).join('');
+}
+
+function setTeam(id, team) {
+    if (!isGM()) return;
+    db.ref('players/' + id + '/team').set(team).catch(dbError);
+}
+
+function startNFCSetup() {
+    if (!isGM()) return;
+    if (players.some(p => !p.team)) return toast('Priskirkite visus žaidėjus komandoms!', true);
+    if (!hasBothTeams()) return toast('Reikia bent po vieną žaidėją kiekvienoje komandoje!', true);
+    db.ref('gameStatus').update({ phase: 'nfc' }).catch(dbError);
+}
+
+/* ==========================================================================
+   NFC SUSIEJIMAS
+   ========================================================================== */
+function renderNFC() {
+    const container = $('nfc-setup-content');
+    const list = players.map(p => `
+        <div style="color:${teamColor(p.team)}; opacity:${p.nfcId ? 0.5 : 1}">
+            ${p.nfcId ? '🟢' : '⚫'} <b>${esc(p.name)}</b> ${p.nfcId ? '(Susietas)' : '(Laukia)'}
+        </div>`).join('');
+
+    if (myRole !== 'GM') {
+        container.innerHTML = `
+            <h3 style="color:var(--gold);">NFC ŽYMIŲ REGISTRACIJA</h3>
+            <p style="font-size:1rem; color:#aaa;">Prieikite prie žaidimo administratoriaus (GM) užregistruoti savo NFC žymę.</p>
+            <div style="text-align:left; margin:20px auto; max-width:300px; line-height:1.8;">${list}</div>`;
+        return;
     }
 
-    function addPlayerToSystem(name, photoData) {
-        players.push({
-            name: name,
-            photo: photoData,
-            nfcId: null, 
-            team: '', 
-            isAlive: true,
-            kills: 0
+    const pending = players.find(p => !p.nfcId);
+    const adminButtons = `
+        <div style="margin-top: 25px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #333; padding-top: 20px;">
+            <button class="action-btn" style="background:#444; color:white; padding:12px; font-size:1rem; margin:0;" onclick="gmGoBackToEdit()">ŽAIDĖJŲ REDAGAVIMAS</button>
+            <button class="action-btn" style="background:var(--red); color:white; padding:12px; font-size:1rem; margin:0;" onclick="gmResetNfcOnly()">IŠTRINTI NFC IR PRADĖTI IŠ NAUJO</button>
+        </div>`;
+
+    if (pending) {
+        container.innerHTML = `
+            <h3 style="color:var(--gold)">NFC KODO PRISKYRIMAS</h3>
+            <h1 style="margin:10px 0;">${esc(pending.name)}</h1>
+            <p style="color:#aaa;">Komanda: <b style="color:${teamColor(pending.team)}">${teamLabel(pending.team)}</b></p>
+            <p style="font-size:0.9rem; margin-bottom: 15px;">Priglauskite šio žaidėjo NFC žymę ir spauskite mygtuką.</p>
+            <button id="btnScanSetup" class="action-btn" onclick="linkPlayerNFC('${pending.id}')">NUSKAITYTI ŽYMĘ</button>
+            <div style="text-align:left; margin:20px auto; max-width:300px; line-height:1.6; font-size:0.85rem; border-top:1px solid #222; padding-top:10px;">
+                <b style="color:#aaa;">Sąrašo progresas:</b>
+                ${list}
+            </div>
+            ${adminButtons}`;
+    } else {
+        container.innerHTML = `
+            <h1 style="color:var(--green); font-size:2.5rem; letter-spacing:2px;">VISI PASIRUOŠĘ!</h1>
+            <p style="font-size:1rem; color:#aaa; margin-bottom:20px;">Visi žaidėjai sėkmingai susiejo savo NFC žymes.</p>
+            <button class="action-btn" style="background:var(--gold); color:black;" onclick="startActualGame()">PRADĖTI ŽAIDIMĄ (PASIRINKTI TAIKINIUS)</button>
+            ${adminButtons}`;
+    }
+}
+
+function linkNFCTo(id) {
+    return serial => {
+        const dup = players.find(x => x.nfcId === serial && x.id !== id);
+        if (dup) return toast(`Ši žymė jau priskirta žaidėjui: ${dup.name}`, true, 4000);
+        db.ref('players/' + id + '/nfcId').set(serial)
+            .then(() => toast('NFC žymė susieta.'))
+            .catch(dbError);
+    };
+}
+function linkPlayerNFC(id) {
+    if (!isGM()) return;
+    waitForTag('btnScanSetup', 'NUSKAITYTI ŽYMĘ', 'LAUKIAMA NFC... (priglauskite)', linkNFCTo(id));
+}
+// Naudojama GM kortelėje žaidimo metu (vėlai prisijungę žaidėjai, pamestos žymės)
+function gmLinkNFC(id) {
+    if (!isGM()) return;
+    const p = players.find(x => x.id === id);
+    if (!p) return;
+    waitForTag('nfcBtn_' + id, p.nfcId ? 'NFC ↻' : 'NFC +', 'LAUKIAMA...', linkNFCTo(id));
+}
+
+function gmGoBackToEdit() {
+    if (!isGM()) return;
+    askConfirm({
+        title: 'REDAGUOTI ŽAIDĖJUS?',
+        text: 'Grįšite į žaidėjų redagavimą. Jau susietos NFC žymės neišsitrins.',
+        onOk: () => { enlistStep = 'enlist'; db.ref('gameStatus').update({ phase: 'enlist' }).catch(dbError); }
+    });
+}
+
+function gmResetNfcOnly() {
+    if (!isGM()) return;
+    askConfirm({
+        title: 'IŠTRINTI NFC?',
+        text: 'Visi NFC priskyrimai bus ištrinti ir skenavimą reikės pradėti iš naujo. Žaidėjai ir komandos išliks.',
+        okLabel: 'IŠTRINTI NFC', danger: true,
+        onOk: () => {
+            const u = {};
+            players.forEach(p => { u['players/' + p.id + '/nfcId'] = null; });
+            db.ref().update(u).catch(dbError);
+        }
+    });
+}
+
+/* ==========================================================================
+   RAUNDO PALEIDIMAS / NAUJAS RAUNDAS / VISKĄ IŠTRINTI
+   ========================================================================== */
+async function launchRound() {
+    if (!isGM()) return;
+    if (players.length < 2 || players.some(p => !p.team) || !hasBothTeams()) {
+        return toast('Reikia bent po vieną žaidėją kiekvienoje komandoje.', true);
+    }
+    const missing = players.filter(p => !p.nfcId);
+    if (missing.length) {
+        return toast(`${missing.length} žaid. be NFC žymės. Naudokite „NAUJAS RAUNDAS (IŠTRINTI NFC)“ ir susiekite visus.`, true, 5000);
+    }
+    const u = {};
+    players.forEach(p => {
+        const b = 'players/' + p.id + '/';
+        u[b + 'order'] = null;
+        u[b + 'isAlive'] = true;
+        u[b + 'kills'] = 0;
+        u[b + 'killedBy'] = null;
+        u[b + 'diedAt'] = null;
+    });
+    const tForRed = pickTarget(players.filter(p => p.team === 'MELYNA'));
+    const tForBlue = pickTarget(players.filter(p => p.team === 'RAUDONA'));
+    u['log'] = null;
+    u['gameStatus'] = {
+        phase: 'game', duration: DEFAULT_DURATION,
+        targets: { RAUDONA: tForRed.id, MELYNA: tForBlue.id }
+    };
+    try { await db.ref().update(u); } catch (e) { dbError(e); }
+}
+function startActualGame() { launchRound(); }
+
+function newRoundKeep() {
+    if (!isGM()) return;
+    askConfirm({
+        title: 'NAUJAS RAUNDAS?',
+        text: 'Visi žaidėjai ir NFC žymės liks. Taškai bus nunulinti, žaidėjai prikelti, bus išrinkti nauji atsitiktiniai taikiniai, žurnalas išvalytas.',
+        okLabel: 'PRADĖTI NAUJĄ RAUNDĄ',
+        onOk: launchRound
+    });
+}
+
+function newRoundWipe() {
+    if (!isGM()) return;
+    askConfirm({
+        title: 'NAUJAS RAUNDAS?',
+        text: 'Žaidėjai liks, bet visos NFC žymės bus ištrintos ir jas reikės susieti iš naujo. Taškai bus nunulinti.',
+        okLabel: 'IŠTRINTI NFC IR PRADĖTI', danger: true,
+        onOk: async () => {
+            const u = {};
+            players.forEach(p => {
+                const b = 'players/' + p.id + '/';
+                u[b + 'nfcId'] = null;
+                u[b + 'isAlive'] = true;
+                u[b + 'kills'] = 0;
+                u[b + 'killedBy'] = null;
+                u[b + 'diedAt'] = null;
+                u[b + 'order'] = null;
+            });
+            u['log'] = null;
+            u['gameStatus'] = { phase: 'nfc' };
+            try { await db.ref().update(u); } catch (e) { dbError(e); }
+        }
+    });
+}
+
+function resetGame() {
+    if (!isGM()) return;
+    askConfirm({
+        title: 'VISKĄ IŠTRINTI?',
+        text: 'Bus ištrinti VISI žaidėjai, NFC priskyrimai, taškai ir žurnalas. Tai negrįžtama. (GM PIN kodas išlieka.)',
+        typeWord: 'IŠTRINTI', okLabel: 'IŠTRINTI VISKĄ', danger: true,
+        onOk: async () => {
+            try {
+                await db.ref().update({ players: null, log: null, gameStatus: { phase: 'enlist' } });
+                enlistStep = 'enlist';
+            } catch (e) { dbError(e); }
+        }
+    });
+}
+
+function startGlobalTimer() {
+    if (!isGM()) return;
+    db.ref('gameStatus/startTime').set(firebase.database.ServerValue.TIMESTAMP).catch(dbError);
+}
+
+function gmEndGame() {
+    if (!isGM()) return;
+    askConfirm({
+        title: 'BAIGTI ŽAIDIMĄ?',
+        text: 'Žaidimas bus užbaigtas visiems ir bus parodyti rezultatai.',
+        okLabel: 'BAIGTI ŽAIDIMĄ', danger: true,
+        onOk: () => endGame('gm')
+    });
+}
+
+/* ==========================================================================
+   GM: ŽAIDĖJŲ VALDYMAS ŽAIDIMO METU
+   ========================================================================== */
+function openAddPlayerModal() {
+    if (!isGM()) return;
+    $('newPlayerName').value = '';
+    newPlayerSelectedTeam = '';
+    $('btnTeamRed').classList.remove('active');
+    $('btnTeamBlue').classList.remove('active');
+    $('add-player-modal').classList.remove('hidden');
+}
+function closeAddPlayerModal() { $('add-player-modal').classList.add('hidden'); }
+function selectNewPlayerTeam(team) {
+    newPlayerSelectedTeam = team;
+    $('btnTeamRed').classList.toggle('active', team === 'RAUDONA');
+    $('btnTeamBlue').classList.toggle('active', team === 'MELYNA');
+}
+function confirmAddPlayer() {
+    if (!isGM()) return;
+    const name = $('newPlayerName').value.trim();
+    if (!validName(name)) return;
+    if (!newPlayerSelectedTeam) return toast('Prašome pasirinkti komandą!', true);
+    db.ref('players').push({
+        name: name, team: newPlayerSelectedTeam, isAlive: true, kills: 0,
+        joined: now()
+    }).then(() => toast('Žaidėjas pridėtas! Susiekite jo NFC žymę kortelėje.'))
+      .catch(dbError);
+    closeAddPlayerModal();
+}
+
+function gmSwapTeam(id) {
+    if (!isGM()) return;
+    const p = players.find(x => x.id === id);
+    if (!p) return;
+    db.ref('players/' + id + '/team').set(p.team === 'RAUDONA' ? 'MELYNA' : 'RAUDONA').catch(dbError);
+}
+
+function gmDeletePlayer(id) {
+    if (!isGM()) return;
+    const p = players.find(x => x.id === id);
+    if (!p) return;
+    askConfirm({
+        title: 'ŠALINTI ŽAIDĖJĄ?',
+        text: `Ar tikrai norite pašalinti žaidėją ${p.name}?`,
+        okLabel: 'ŠALINTI', danger: true,
+        onOk: async () => {
+            try {
+                await db.ref('players/' + id).remove();
+                if (phase() === 'game' && status.startTime) checkTeamElimination();
+            } catch (e) { dbError(e); }
+        }
+    });
+}
+
+/* ==========================================================================
+   MEDŽIOKLĖ (komandos telefonas)
+   1) nuskenuojama TAIKINIO žymė  2) nuskenuojama ŽUDIKO (savo komandos) žymė
+   ========================================================================== */
+let pendingKill = null;   // taikinys, užfiksuotas nuskenavus jo žymę
+
+function killScan() {
+    if (Math.ceil((blockedUntil() - now()) / 1000) > 0) return;
+    waitForTag('killBtn', KILL_IDLE_TEXT, 'LAUKIAMA NFC... (spauskite, kad atšauktumėte)', serial => {
+        if (!isRunning()) return toast('Laikmatis nevyksta – nukovimas negalimas.', true);
+        const target = getTeamTarget(myRole);          // taikinys užfiksuojamas nuskenavimo metu
+        if (!target) return toast('Šiuo metu taikinio nėra.', true);
+        if (!target.nfcId) return toast('Taikinys neturi NFC žymės – kreipkitės į GM.', true, 4000);
+        if (serial !== target.nfcId) {
+            applyPenalty();
+            logMiss();
+            return toast(`KLAIDA: nuskenuota ne jūsų taikinio žymė! Blokuota ${PENALTY_SECONDS}s.`, true, 4000);
+        }
+        pendingKill = { id: target.id, name: target.name, team: target.team };
+        $('killer-target').innerText = target.name;
+        $('killer-modal').classList.remove('hidden');
+    });
+}
+
+function closeKillerModal() {
+    cancelNfcWait();                       // išvalome laukiantį NFC skaitymą
+    pendingKill = null;
+    $('killer-modal').classList.add('hidden');
+}
+
+function scanKillerNFC() {
+    waitForTag('btnScanKiller', 'NUSKENUOTI SAVO NFC', 'LAUKIAMA JŪSŲ NFC... (spauskite, kad atšauktumėte)', async serial => {
+        const t = pendingKill;
+        if (!t) return;
+        if (!isRunning()) { closeKillerModal(); return toast('Laikmatis nevyksta – nukovimas negalimas.', true); }
+        // Dead players can score: gyvumo nepatikriname, tik komandą ir žymę.
+        const hunter = players.find(p => p.team === myRole && p.nfcId === serial);
+        if (!hunter) return toast('KLAIDA: ši NFC žymė nepriklauso jūsų komandai arba žaidėjas nerastas!', true, 4000);
+        closeKillerModal();
+        await confirmKill(hunter, t);
+    });
+}
+
+function logMiss() {
+    db.ref('log').push({
+        type: 'miss', hunterTeam: myRole, t: firebase.database.ServerValue.TIMESTAMP
+    }).catch(() => {});
+}
+
+// Atominis nukovimas: transakcija užtikrina, kad taikinys miršta tik kartą
+// ir tašką gauna tik tas medžiotojas, kuriam transakcija pavyko.
+async function confirmKill(hunter, target) {
+    try {
+        const res = await db.ref('players/' + target.id).transaction(p => {
+            if (p === null) return p;          // dar neužkrauta / ištrintas
+            if (!p.isAlive) return;            // jau nukautas – nutraukiame
+            p.isAlive = false;
+            p.killedBy = hunter.id;
+            p.diedAt = now();
+            return p;
         });
-        renderEnlist();
-    }
+        const v = res.snapshot.val();
+        if (!res.committed || !v || v.killedBy !== hunter.id) {
+            return toast('Šis taikinys jau nukautas arba nebeegzistuoja.', true);
+        }
+        await db.ref('players/' + hunter.id).transaction(p => {
+            if (p === null) return p;          // medžiotojas ištrintas – neprikuriame "vaiduoklio"
+            p.kills = (p.kills || 0) + 1;
+            return p;
+        });
+        await db.ref('log').push({
+            type: 'kill',
+            hunterId: hunter.id, hunterName: hunter.name, hunterTeam: hunter.team,
+            targetId: target.id, targetName: target.name, targetTeam: target.team,
+            t: firebase.database.ServerValue.TIMESTAMP
+        });
+        toast(`NUŽUDYMAS PATVIRTINTAS! Taškas: ${hunter.name}`);
+        checkTeamElimination();
+    } catch (e) { dbError(e); }
+}
 
-    function renderEnlist() {
-        document.getElementById('playerList').innerHTML = players.map(p => `
-            <div class="player-card"><img src="${p.photo}"><b>${p.name}</b></div>
-        `).join('');
-    }
+async function checkTeamElimination() {
+    try {
+        const snap = await db.ref('players').once('value');
+        const arr = [];
+        snap.forEach(c => { const v = c.val(); if (v && v.name) arr.push(v); });
+        const hasR = arr.some(p => p.team === 'RAUDONA');
+        const hasB = arr.some(p => p.team === 'MELYNA');
+        if (!hasR || !hasB) return;
+        const aR = arr.filter(p => p.team === 'RAUDONA' && p.isAlive).length;
+        const aB = arr.filter(p => p.team === 'MELYNA' && p.isAlive).length;
+        if (aR === 0 || aB === 0) endGame('eliminated');
+    } catch (e) { console.error(e); }
+}
 
-    function navToAssign() {
-        if (players.length === 0) return alert("Pirma pridėkite žaidėjų!");
-        document.getElementById('screen-enlist').classList.add('hidden');
-        document.getElementById('screen-assign').classList.remove('hidden');
-        renderAssign();
-    }
+/* ==========================================================================
+   RENDER
+   ========================================================================== */
+function renderScore() {
+    const aliveRed = players.filter(p => p.team === 'RAUDONA' && p.isAlive).length;
+    const aliveBlue = players.filter(p => p.team === 'MELYNA' && p.isAlive).length;
+    $('score-strip').innerHTML = `
+        <span style="color:var(--red)">RAUDONI: ${aliveRed}</span>
+        <span style="color:var(--blue)">MĖLYNI: ${aliveBlue}</span>`;
+}
 
-    function renderAssign() {
-        document.getElementById('assignList').innerHTML = players.map((p, i) => `
-            <div class="player-card" style="border-left-color:${p.team==='RAUDONA'?'var(--red)':p.team==='MELYNA'?'var(--blue)':'#444'}">
-                <img src="${p.photo}"><b style="flex:1">${p.name}</b>
-                <div style="display:flex; gap:5px; align-items:center;">
-                    <button class="team-btn ${p.team==='RAUDONA'?'active':''}" style="background:var(--red)" onclick="setTeam(${i},'RAUDONA')">RED</button>
-                    <button class="team-btn ${p.team==='MELYNA'?'active':''}" style="background:var(--blue)" onclick="setTeam(${i},'MELYNA')">BLUE</button>
-                    <button class="gm-btn" style="background:var(--red); color:white; padding:10px; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem; font-weight:bold;" onclick="gmDeletePlayer(${i})">ŠALINTI</button>
+function feedLine(l) {
+    const tm = `<span class="ft">${fmtElapsed(l.t)}</span>`;
+    if (l.type === 'miss') {
+        const who = l.hunterName ? nameSpan(l.hunterName, l.hunterTeam)
+            : `<b style="color:${teamColor(l.hunterTeam)}">${teamLabel(l.hunterTeam)} komanda</b>`;
+        return `<div class="feed-line miss">${tm}${who} nuskenavo klaidingą žymę</div>`;
+    }
+    return `<div class="feed-line">${tm}${nameSpan(l.hunterName, l.hunterTeam)} ➜ ${nameSpan(l.targetName, l.targetTeam)}<span class="fk">NUKAUTAS</span></div>`;
+}
+function renderFeed(containerId, limit) {
+    const c = $(containerId);
+    if (!c) return;
+    const items = logs.filter(l => myRole === 'GM' || l.type === 'kill').slice(-limit).reverse();
+    c.innerHTML = items.length ? items.map(feedLine).join('') : '<div class="feed-empty">Kol kas nieko nenutiko.</div>';
+}
+
+function renderHunter() {
+    const el = $('player-area');
+    if (!status.startTime) {
+        el.innerHTML = `
+            <div class="target-frame">
+                <h2 style="color:var(--gold); margin-top:0;">ŽAIDIMAS DAR NEPRASIDĖJO</h2>
+                <p style="color:#aaa; margin-bottom:0;">Laukite GM signalo. Laikmatis prasidės visiems vienu metu.</p>
+            </div>`;
+        return;
+    }
+    const target = getTeamTarget(myRole);
+    let body;
+    if (target) {
+        body = `
+            <div class="lbl">JŪSŲ KOMANDOS TAIKINYS</div>
+            <h1 style="margin:10px 0; color:${teamColor(target.team)}">${esc(target.name)}</h1>
+            <button id="killBtn" class="action-btn" style="background:#a00; color:white;" onclick="killScan()">${KILL_IDLE_TEXT}</button>`;
+    } else if (!players.length) {
+        body = `<p style="color:#aaa;">Kraunama...</p>`;
+    } else if (aliveEnemies(myRole).length) {
+        body = `<h2 style="color:var(--gold); margin:10px 0;">Skiriamas naujas taikinys...</h2>`;
+    } else {
+        body = `<h1 style="color:var(--green); margin:10px 0;">MISIJA ĮVYKDYTA</h1>`;
+    }
+    el.innerHTML = `
+        <div class="me-bar" style="border-left-color:${teamColor(myRole)}">
+            <span>KOMANDA: <b style="color:${teamColor(myRole)}">${teamLabel(myRole)}</b></span>
+        </div>
+        <div class="target-frame">${body}</div>`;
+    updateKillBtn();
+}
+
+function renderGM() {
+    const started = !!status.startTime;
+    $('btnStartTimer').classList.toggle('hidden', started);
+    $('btnEndGame').classList.toggle('hidden', !started);
+
+    const tr = getTeamTarget('RAUDONA'), tb = getTeamTarget('MELYNA');
+    $('gm-targets').innerHTML = `
+        <div class="score-strip" style="flex-direction:column; gap:6px; font-size:0.95rem; margin-top:10px;">
+            <div style="color:var(--red)">RAUDONŲ TAIKINYS: <b>${tr ? esc(tr.name) : '—'}</b></div>
+            <div style="color:var(--blue)">MĖLYNŲ TAIKINYS: <b>${tb ? esc(tb.name) : '—'}</b></div>
+        </div>`;
+
+    $('gm-player-list').innerHTML = players.map(p => {
+        const hunted = ['RAUDONA', 'MELYNA'].some(tm => { const x = getTeamTarget(tm); return x && x.id === p.id; });
+        return `
+        <div class="gm-card" style="opacity:${p.isAlive ? 1 : 0.55}; border-left-color:${teamColor(p.team)}">
+            <div class="gm-card-info">
+                <b style="text-decoration:${p.isAlive ? 'none' : 'line-through'}">${esc(p.name)}</b>
+                <div class="gm-status">
+                    ${p.isAlive ? '<span style="color:var(--green)">● GYVAS</span>' : '<span style="color:var(--red)">❌ NUKAUTAS</span>'}<br>
+                    NFC: <b style="color:${p.nfcId ? 'var(--gold)' : '#f66'}">${p.nfcId ? 'SUSIETAS' : 'NĖRA'}</b><br>
+                    TAŠKAI: <b style="color:white; font-size:1.1rem;">${p.kills || 0}</b><br>
+                    ${hunted ? '<span style="color:var(--gold)">🎯 DABAR MEDŽIOJAMAS</span>' : ''}
                 </div>
             </div>
-        `).join('');
-    }
+            <div class="gm-actions">
+                <button class="gm-btn" style="background:#444; color:white;" onclick="gmSwapTeam('${p.id}')">KEISTI</button>
+                <button id="nfcBtn_${p.id}" class="gm-btn" style="background:${p.nfcId ? '#555' : 'var(--gold)'}; color:${p.nfcId ? 'white' : 'black'};" onclick="gmLinkNFC('${p.id}')">${p.nfcId ? 'NFC ↻' : 'NFC +'}</button>
+                <button class="gm-btn" style="background:var(--red); color:white;" onclick="gmDeletePlayer('${p.id}')">ŠALINTI</button>
+            </div>
+        </div>`;
+    }).join('');
+}
 
-    window.setTeam = function(idx, teamName) {
-        players[idx].team = teamName;
-        renderAssign();
-    };
+function renderGame() {
+    const gm = myRole === 'GM';
+    $('gm-area').classList.toggle('hidden', !gm);
+    $('player-area').classList.toggle('hidden', gm);
+    updateTimerText();
+    renderScore();
+    renderFeed('feed', gm ? 40 : 8);
+    if (gm) renderGM(); else renderHunter();
+}
 
-    function startNFCSetup() {
-        if (players.some(p => !p.team)) return alert("Priskirkite visus žaidėjus komandoms!");
-        db.ref('players').set(players);
-        db.ref('gameStatus').update({ nfcSetup: true, started: false }); 
-    }
+const END_REASONS = {
+    eliminated: 'Viena komanda visiškai sunaikinta.',
+    time: 'Laikas baigėsi.',
+    gm: 'Žaidimą užbaigė GM.'
+};
 
-    async function ensureNFCScanning() {
-        if (!('NDEFReader' in window)) {
-            alert("Jūsų naršyklė nepalaiko Web NFC! Būtina naudoti Chrome telefone Android platformoje per HTTPS.");
-            return false;
-        }
-        if (!ndefInstance) {
-            try {
-                ndefInstance = new NDEFReader();
-                await ndefInstance.scan();
-                ndefInstance.onreading = event => {
-                    if (activeNfcCallback) {
-                        const callbackToExecute = activeNfcCallback;
-                        activeNfcCallback = null; 
-                        callbackToExecute(event.serialNumber);
-                    }
-                };
-                ndefInstance.onreadingerror = () => {
-                    alert("Klaida nuskaitant žymę. Pridėkite dar kartą.");
-                };
-            } catch (error) {
-                console.error(error);
-                alert("Nepavyko paleisti NFC skaitytuvo. Patikrinkite nustatymus.");
-                return false;
-            }
-        }
-        return true;
-    }
+function renderEnd() {
+    const stat = t => ({
+        alive: players.filter(p => p.team === t && p.isAlive).length,
+        total: players.filter(p => p.team === t).length,
+        kills: players.filter(p => p.team === t).reduce((s, p) => s + (p.kills || 0), 0)
+    });
+    const r = stat('RAUDONA'), b = stat('MELYNA');
+    let winner = null;
+    if (r.alive !== b.alive) winner = r.alive > b.alive ? 'RAUDONA' : 'MELYNA';
+    else if (r.kills !== b.kills) winner = r.kills > b.kills ? 'RAUDONA' : 'MELYNA';
 
-    function renderNFCSetup() {
-        const container = document.getElementById('nfc-setup-content');
-        if (!container) return;
+    const dur = (status.startTime && status.endTime)
+        ? fmt(Math.max(0, Math.floor((status.endTime - status.startTime) / 1000))) : '--:--';
 
+    $('end-summary').innerHTML = `
+        <div class="winner-banner" style="border-color:${winner ? teamColor(winner) : 'var(--gold)'}">
+            <h1 style="margin:0; color:${winner ? teamColor(winner) : 'var(--gold)'}">
+                ${winner ? teamLabel(winner) + ' KOMANDA LAIMĖJO!' : 'LYGIOSIOS'}
+            </h1>
+            <p style="color:#aaa; margin:10px 0 0 0;">${END_REASONS[status.endReason] || ''}<br>Žaidimo trukmė: ${dur}</p>
+        </div>
+        <div class="score-strip" style="flex-direction:column; gap:6px;">
+            <div style="display:flex; justify-content:space-between; color:var(--red)">
+                <span>RAUDONI</span><span>gyvi ${r.alive}/${r.total} · taškai ${r.kills}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; color:var(--blue)">
+                <span>MĖLYNI</span><span>gyvi ${b.alive}/${b.total} · taškai ${b.kills}</span>
+            </div>
+        </div>
+        <p style="color:#666; font-size:0.8rem; margin-top:-5px;">Nugalėtojas: daugiau gyvų žaidėjų; esant lygiai – daugiau taškų.</p>`;
+
+    const sorted = players.slice().sort((x, y) =>
+        (y.kills || 0) - (x.kills || 0) || (y.isAlive ? 1 : 0) - (x.isAlive ? 1 : 0) || x.name.localeCompare(y.name));
+    const topKills = sorted.length ? (sorted[0].kills || 0) : 0;
+    $('end-board').innerHTML = sorted.map((p, i) => `
+        <div class="board-row" style="border-left-color:${teamColor(p.team)}">
+            <span class="rank">${i + 1}.</span>
+            <span class="nm" style="color:${teamColor(p.team)}">${esc(p.name)} ${topKills > 0 && (p.kills || 0) === topKills ? '🏆' : ''}</span>
+            <span style="color:#aaa; font-size:0.85rem;">${p.isAlive ? 'gyvas' : 'nukautas'}</span>
+            <b style="width:30px; text-align:right;">${p.kills || 0}</b>
+        </div>`).join('');
+
+    renderFeed('end-feed', 100);
+    const gm = myRole === 'GM';
+    $('end-gm').classList.toggle('hidden', !gm);
+    $('end-wait').classList.toggle('hidden', gm);
+}
+
+function render() {
+    if (!myRole) { show('screen-role'); return; }
+    if (myRole === 'GM' && !isGM()) { show('screen-pin'); renderPin(); return; }
+
+    const ph = phase();
+    if (ph !== 'game' && pendingKill) closeKillerModal();
+    if (ph === 'nfc') {
+        show('screen-nfc');
+        renderNFC();
+    } else if (ph === 'game') {
+        show('screen-game');
+        renderGame();
+        ensureTargets();
+    } else if (ph === 'ended') {
+        show('screen-end');
+        renderEnd();
+    } else {   // 'enlist'
         if (myRole === 'GM') {
-            let pendingIndex = -1;
-            let pendingPlayer = null;
-
-            for (let i = 0; i < players.length; i++) {
-                if (!players[i].nfcId) {
-                    pendingPlayer = players[i];
-                    pendingIndex = i;
-                    break;
-                }
-            }
-
-            const adminControlButtons = `
-                <div style="margin-top: 25px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #333; padding-top: 20px;">
-                    <button class="action-btn" style="background:#444; color:white; padding:12px; font-size:1rem; margin:0;" onclick="gmGoBackToEdit()">ŽAIDĖJŲ REDAGAVIMAS</button>
-                    <button class="action-btn" style="background:var(--red); color:white; padding:12px; font-size:1rem; margin:0;" onclick="gmResetNfcOnly()">IŠTRINTI NFC IR PRADĖTI IŠ NAUJO</button>
-                </div>
-            `;
-
-            if (pendingPlayer && pendingIndex !== -1) {
-                container.innerHTML = `
-                    <h3 style="color:var(--gold)">NFC KODO PRISKYRIMAS</h3>
-                    <img class="target-img" src="${pendingPlayer.photo}" style="border-color:${pendingPlayer.team==='RAUDONA'?'var(--red)':'var(--blue)'}">
-                    <h1 style="margin:10px 0;">${pendingPlayer.name}</h1>
-                    <p style="color:#aaa;">Komanda: <b style="color:${pendingPlayer.team==='RAUDONA'?'var(--red)':'var(--blue)'}">${pendingPlayer.team}</b></p>
-                    <p style="font-size:0.9rem; margin-bottom: 15px;">Priglauskite šio žaidėjo NFC žymę ir spauskite mygtuką.</p>
-                    <button id="btnScanSetup" class="action-btn" onclick="linkPlayerNFC(${pendingIndex})">NUSKAITYTI ŽYMĘ</button>
-                    
-                    <div style="text-align:left; margin:20px auto; max-width:300px; line-height:1.6; font-size:0.85rem; border-top:1px solid #222; padding-top:10px;">
-                        <b style="color:#aaa;">Sąrašo progresas:</b>
-                        ${players.map(p => `
-                            <div style="color:${p.team==='RAUDONA'?'var(--red)':'var(--blue)'}; opacity:${p.nfcId ? 0.5 : 1}">
-                                ${p.nfcId ? '🟢' : '⚫'} <b>${p.name}</b> ${p.nfcId ? '(Susietas)' : '(Laukia)'}
-                            </div>
-                        `).join('')}
-                    </div>
-                    ${adminControlButtons}
-                `;
-            } else {
-                container.innerHTML = `
-                    <h1 style="color:var(--green); font-size:2.5rem; letter-spacing:2px;">VISI PASIRUOŠĘ!</h1>
-                    <p style="font-size:1rem; color:#aaa; margin-bottom:20px;">Visi žaidėjai sėkmingai susiejo savo NFC žymes.</p>
-                    <button class="action-btn" style="background:var(--gold); color:black;" onclick="startActualGame()">PRADĖTI ŽAIDIMĄ (IŠMAIŠYTI)</button>
-                    ${adminControlButtons}
-                `;
-            }
+            if (enlistStep === 'assign') { show('screen-assign'); renderAssign(); }
+            else { show('screen-enlist'); renderEnlist(); }
         } else {
-            container.innerHTML = `
-                <h3 style="color:var(--gold); text-align:center;">NFC ŽYMIŲ REGISTRACIJA</h3>
-                <p style="font-size:1rem; color:#aaa; text-align:center;">Prieikite prie žaidimo administratoriaus (GM) užregistruoti savo NFC žymę.</p>
-                <div style="text-align:left; margin:20px auto; max-width:300px; line-height:1.8;">
-                    ${players.map(p => `
-                        <div style="color:${p.team==='RAUDONA'?'var(--red)':'var(--blue)'}">
-                            ${p.nfcId ? '🟢' : '⚫'} <b>${p.name}</b>: ${p.nfcId ? 'SUSIETAS' : 'LAUKIA'}
-                        </div>
-                    `).join('')}
-                </div>
-            `;
+            waitScreen('LAUKIAME STARTO', 'Žaidimo vedėjas ruošia žaidėjų sąrašą.');
         }
     }
+    applyNfcWaitUI();
+}
 
-    window.gmGoBackToEdit = function() {
-        if (!confirm("Ar tikrai norite grįžti į žaidėjų redagavimą? Esamas NFC registracijos progresas bus sustabdytas (bet kodai neišsitrina).")) return;
-        db.ref('gameStatus').update({ nfcSetup: false, started: false }); 
-    };
-
-    window.gmResetNfcOnly = function() {
-        if (!confirm("Ar tikrai norite ištrinti visus suvestus NFC kodus ir pradėti skenavimo procesą iš naujo? Žaidėjai ir komandos išliks.")) return;
-        players.forEach(p => p.nfcId = null);
-        db.ref('players').set(players);
-    };
-
-    window.linkPlayerNFC = async function(pIndex) {
-        if (pIndex === undefined || pIndex === -1) return;
-        
-        const btn = document.getElementById('btnScanSetup');
-        btn.innerText = "LAUKIAMA NFC... (Priglauskite)";
-        btn.classList.add('scanning');
-        
-        const ready = await ensureNFCScanning();
-        if (!ready) {
-            btn.innerText = "NUSKAITYTI ŽYMĘ";
-            btn.classList.remove('scanning');
-            return;
-        }
-
-        activeNfcCallback = async (serial) => {
-            if (players.some(p => p.nfcId === serial)) {
-                alert("Ši NFC žymė jau priskirta kitam žaidėjui! Naudokite naują.");
-                btn.innerText = "NUSKAITYTI ŽYMĘ";
-                btn.classList.remove('scanning');
-                return;
-            }
-
-            if (players[pIndex]) {
-                players[pIndex].nfcId = serial;
-                await db.ref('players').set(players);
-            }
-        };
-    };
-
-    window.startActualGame = function() {
-        for (let i = players.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [players[i], players[j]] = [players[j], players[i]];
-        }
-        db.ref('players').set(players);
-        db.ref('gameStatus').update({ nfcSetup: false, started: true }); 
-    };
-
-    window.startGlobalTimer = function() {
-        db.ref('gameStatus').update({ startTime: Date.now() });
-    }
-
-    window.newRound = function() {
-        if (!confirm("Ar tikrai norite pradėti NAUJĄ RAUNDĄ? Visi žaidėjai liks tie patys, bet jų NFC žymės bus ištrintos.")) return;
-        
-        players.forEach(p => { 
-            p.nfcId = null; 
-            p.isAlive = true;
-            p.kills = 0;
-        });
-        
-        db.ref('players').set(players);
-        db.ref('gameStatus').update({ nfcSetup: true, started: false, startTime: null });
-    }
-
-    window.resetGame = function() {
-        if (!confirm("Ar tikrai norite IŠTRINTI visus duomenis?")) return;
-        db.ref('players').remove();
-        db.ref('gameStatus').set({ started: false, nfcSetup: false, modeSelected: false });
-        players = [];
-        document.getElementById('playerList').innerHTML = '';
-        document.getElementById('assignList').innerHTML = '';
-    }
+/* ==========================================================================
+   FIREBASE KLAUSYTOJAI + START
+   ========================================================================== */
+function attachListeners() {
+    db.ref('.info/serverTimeOffset').on('value', s => { serverOffset = s.val() || 0; });
 
     db.ref('gameStatus').on('value', snap => {
-        const status = snap.val() || { started: false, nfcSetup: false, modeSelected: false };
-        
-        // Atnaujinam globalią nuotraukų taisyklę
-        if (status.usePhotos !== undefined) {
-            usePhotos = status.usePhotos;
-        }
-
-        document.querySelectorAll('.container > div').forEach(d => d.classList.add('hidden'));
-
-        if (!status.modeSelected) {
-            // Pats pirmas startas
-            if (myRole === 'GM') {
-                document.getElementById('screen-setup').classList.remove('hidden');
-            } else {
-                document.getElementById('screen-wait').classList.remove('hidden');
-            }
-        } 
-        else if (status.started) {
-            document.getElementById('screen-game').classList.remove('hidden');
-            
-            if (myRole === 'GM') {
-                document.getElementById('hunt-ui').classList.add('hidden');
-                document.getElementById('player-score').classList.add('hidden');
-                document.getElementById('gm-dashboard').classList.remove('hidden');
-
-                if(status.startTime) {
-                    if(document.getElementById('btnStartTimer')) document.getElementById('btnStartTimer').classList.add('hidden');
-                } else {
-                    if(document.getElementById('btnStartTimer')) document.getElementById('btnStartTimer').classList.remove('hidden');
-                }
-                renderGMDashboard();
-            } else {
-                document.getElementById('hunt-ui').classList.remove('hidden');
-                document.getElementById('player-score').classList.remove('hidden');
-            }
-            
-            if (status.startTime) {
-                startTimer(status.startTime);
-            } else {
-                clearInterval(timerInterval);
-                document.getElementById('timer').innerText = "105:00";
-            }
-        } 
-        else if (status.nfcSetup) {
-            if (myRole === 'GM' || myRole === 'RAUDONA' || myRole === 'MELYNA') {
-                document.getElementById('screen-nfc-setup').classList.remove('hidden');
-                renderNFCSetup();
-            } else {
-                document.getElementById('screen-wait').classList.remove('hidden');
-            }
-        } 
-        else {
-            // Pridėjimo / Skirstymo fazė
-            if (myRole === 'GM') {
-                // Jei grįžtama iš NFC, arba einama toliau, parodome atitinkamai. Bet čia renderEnroll
-                document.getElementById('screen-enlist').classList.remove('hidden');
-                
-                // Pritaikome UI pagal tai, koks režimas pasirinktas
-                if (!usePhotos) {
-                    document.getElementById('drop-zone').classList.add('hidden');
-                    document.getElementById('btnQuickAdd').classList.remove('hidden');
-                } else {
-                    document.getElementById('drop-zone').classList.remove('hidden');
-                    document.getElementById('btnQuickAdd').classList.add('hidden');
-                }
-            } else {
-                document.getElementById('screen-wait').classList.remove('hidden');
-            }
-        }
-    });
+        status = snap.val() || {};
+        if (phase() !== 'game') endRequested = false;
+        render();
+    }, dbError);
 
     db.ref('players').on('value', snap => {
-        if (snap.exists()) {
-            players = Object.values(snap.val()); 
-        } else {
-            players = []; 
-        }
-        
-        if (!document.getElementById('screen-enlist').classList.contains('hidden')) {
-            renderEnlist();
-        }
-        if (!document.getElementById('screen-assign').classList.contains('hidden')) {
-            renderAssign();
-        }
-        if (!document.getElementById('screen-nfc-setup').classList.contains('hidden')) {
-            renderNFCSetup();
-        }
-        
-        if (myRole !== 'GM') {
-            updateTarget();
-            renderPlayerScore();
-        } else {
-            renderGMDashboard();
-        }
-    });
-
-    function startTimer(startTime) {
-        clearInterval(timerInterval);
-        timerInterval = setInterval(() => {
-            const rem = 6300 - Math.floor((Date.now() - startTime) / 1000); 
-            if (rem <= 0) {
-                clearInterval(timerInterval);
-                return document.getElementById('timer').innerText = "00:00";
-            }
-            const m = Math.floor(rem / 60), s = rem % 60;
-            document.getElementById('timer').innerText = `${m}:${s < 10 ? '0'+s : s}`;
-        }, 1000);
-    }
-
-    function updateTarget() {
-        if (players.length === 0) return;
-
-        const target = players.find(p => p.team !== myRole && p.isAlive);
-        if (!target) {
-            document.getElementById('hunt-ui').innerHTML = "<h1 style='color:var(--green); text-align:center;'>MISIJA ĮVYKDYTA</h1>";
-            window.activeTargetNFC = null;
-            return;
-        }
-        
-        if (!document.getElementById('targetImg')) {
-            document.getElementById('hunt-ui').innerHTML = `
-                <img id="targetImg" class="target-img" src="${target.photo}">
-                <h1 id="targetName" style="margin:10px 0;">${target.name}</h1>
-                <button id="killBtn" onclick="scanTargetNFC()" class="action-btn" style="background:#a00; color:white;">NUSKAITYTI TAIKINIO NFC (PATVIRTINTI)</button>
-            `;
-        } else {
-            document.getElementById('targetImg').src = target.photo;
-            document.getElementById('targetName').innerText = target.name;
-        }
-        
-        window.activeTargetNFC = target.nfcId;
-    }
-
-    function renderPlayerScore() {
-        if (myRole === 'GM') return; 
-
-        const aliveRed = players.filter(p => p.team === 'RAUDONA' && p.isAlive).length;
-        const aliveBlue = players.filter(p => p.team === 'MELYNA' && p.isAlive).length;
-
-        document.getElementById('player-score').innerHTML = `
-            <div style="display:flex; justify-content:space-between; background:#111; padding:12px; border-radius:8px; border:1px solid #333;">
-                <span style="color:var(--red); font-size:1.1rem; font-weight:bold;">RAUDONI: ${aliveRed}</span>
-                <span style="color:var(--blue); font-size:1.1rem; font-weight:bold;">MĖLYNI: ${aliveBlue}</span>
-            </div>
-        `;
-    }
-
-    window.closeKillerModal = function() {
-        document.getElementById('killer-modal').classList.add('hidden');
-    }
-
-    window.scanTargetNFC = async function() {
-        if (!window.activeTargetNFC) return alert("TAIKINYS NERASTAS!");
-        
-        const killBtn = document.getElementById('killBtn');
-        killBtn.innerText = "LAUKIAMA NFC... (Priglauskite)";
-        killBtn.classList.add('scanning');
-
-        const ready = await ensureNFCScanning();
-        if(!ready) return;
-
-        activeNfcCallback = (serial) => {
-            killBtn.innerText = "NUSKAITYTI TAIKINIO NFC (PATVIRTINTI)";
-            killBtn.classList.remove('scanning');
-            
-            if (serial === window.activeTargetNFC) {
-                document.getElementById('killer-modal').classList.remove('hidden');
-            } else {
-                alert("KLAIDA: Nuskenuota klaidinga NFC žymė! Tai ne jūsų taikinys.");
-                killBtn.disabled = true;
-                
-                let timeLeft = 15;
-                killBtn.style.background = "#555";
-                killBtn.innerText = `BLOKUOTA (${timeLeft}s)`;
-
-                const penaltyTimer = setInterval(() => {
-                    timeLeft--;
-                    if (timeLeft <= 0) {
-                        clearInterval(penaltyTimer);
-                        killBtn.disabled = false;
-                        killBtn.style.background = "#a00";
-                        killBtn.innerText = "NUSKAITYTI TAIKINIO NFC (PATVIRTINTI)";
-                    } else {
-                        killBtn.innerText = `BLOKUOTA (${timeLeft}s)`;
-                    }
-                }, 1000);
-            }
-        };
-    }
-
-    window.scanKillerNFC = async function() {
-        const btn = document.getElementById('btnScanKiller');
-        btn.innerText = "LAUKIAMA JŪSŲ NFC...";
-        btn.classList.add('scanning');
-
-        const ready = await ensureNFCScanning();
-        if(!ready) return;
-
-        activeNfcCallback = (serial) => {
-            btn.innerText = "NUSKENUOTI SAVO NFC";
-            btn.classList.remove('scanning');
-
-            const validHunter = players.find(p => p.team === myRole && p.nfcId === serial);
-
-            if (validHunter) {
-                const target = players.find(p => p.team !== myRole && p.isAlive);
-                if(!target) return;
-
-                db.ref('players').once('value', snap => {
-                    snap.forEach(c => { 
-                        const val = c.val();
-                        if(val.nfcId === target.nfcId) {
-                            c.ref.update({ isAlive: false }); 
-                        }
-                        if(val.nfcId === validHunter.nfcId) {
-                            c.ref.update({ kills: (val.kills || 0) + 1 });
-                        }
-                    });
-                });
-                
-                alert("NUŽUDYMAS PATVIRTINTAS! Taškas skirtas žaidėjui: " + validHunter.name);
-                closeKillerModal();
-            } else {
-                alert("KLAIDA: Šis NFC nepriklauso jūsų komandai arba žaidėjas nerastas!");
-            }
-        };
-    }
-
-    window.openAddPlayerModal = function() {
-        document.getElementById('newPlayerName').value = '';
-        document.getElementById('newPlayerFile').value = '';
-        newPlayerSelectedTeam = '';
-        document.getElementById('btnTeamRed').classList.remove('active');
-        document.getElementById('btnTeamBlue').classList.remove('active');
-        
-        // Pataisome laukelius pagal naudojamą režimą
-        if (!usePhotos) {
-            document.getElementById('newPlayerFile').classList.add('hidden');
-        } else {
-            document.getElementById('newPlayerFile').classList.remove('hidden');
-        }
-        
-        document.getElementById('add-player-modal').classList.remove('hidden');
-    }
-
-    window.closeAddPlayerModal = function() {
-        document.getElementById('add-player-modal').classList.add('hidden');
-    }
-
-    window.selectNewPlayerTeam = function(team) {
-        newPlayerSelectedTeam = team;
-        document.getElementById('btnTeamRed').classList.toggle('active', team === 'RAUDONA');
-        document.getElementById('btnTeamBlue').classList.toggle('active', team === 'MELYNA');
-    }
-
-    window.confirmAddPlayer = function() {
-        const name = document.getElementById('newPlayerName').value.trim();
-        const fileInput = document.getElementById('newPlayerFile');
-        
-        if (!name) return alert("Prašome įvesti vardą!");
-        if (!newPlayerSelectedTeam) return alert("Prašome pasirinkti komandą!");
-        
-        if (!usePhotos) {
-            addPlayerToSystemMidGame(name, DEFAULT_AVATAR, newPlayerSelectedTeam);
-            return;
-        }
-
-        if (usePhotos && !fileInput.files.length) return alert("Prašome pasirinkti nuotrauką!");
-
-        const file = fileInput.files[0];
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = (event) => {
-            const img = new Image();
-            img.src = event.target.result;
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const MAX_WIDTH = 500;
-                const scale = MAX_WIDTH / img.width;
-                canvas.width = MAX_WIDTH;
-                canvas.height = img.height * scale;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                
-                const compressedData = canvas.toDataURL('image/jpeg', 0.6);
-                addPlayerToSystemMidGame(name, compressedData, newPlayerSelectedTeam);
-            };
-        };
-    }
-    
-    function addPlayerToSystemMidGame(name, photoData, team) {
-        players.push({
-            name: name,
-            photo: photoData,
-            nfcId: null, 
-            team: team, 
-            isAlive: true,
-            kills: 0
+        const arr = [];
+        snap.forEach(c => {
+            const v = c.val();
+            if (v && typeof v === 'object' && v.name) arr.push(Object.assign({}, v, { id: c.key }));
         });
-        
-        db.ref('players').set(players);
-        closeAddPlayerModal();
-        alert("Žaidėjas pridėtas!");
+        arr.sort((a, b) => (a.joined || 0) - (b.joined || 0) || a.name.localeCompare(b.name));
+        players = arr;
+        render();
+    }, dbError);
+
+    db.ref('log').limitToLast(100).on('value', snap => {
+        const arr = [];
+        snap.forEach(c => { const v = c.val(); if (v) arr.push(Object.assign({}, v, { id: c.key })); });
+        logs = arr;
+        if (phase() === 'game') renderFeed('feed', myRole === 'GM' ? 40 : 8);
+        if (phase() === 'ended') renderFeed('end-feed', 100);
+    }, dbError);
+
+    if (myRole === 'GM') {
+        db.ref('config/gmPinHash').on('value', snap => {
+            pinHashInDb = snap.val();   // null, jei nėra
+            render();
+        }, dbError);
     }
+}
 
-    window.gmSwapTeam = function(index) {
-        if (!players[index]) return;
-        players[index].team = players[index].team === 'RAUDONA' ? 'MELYNA' : 'RAUDONA';
-        db.ref('players').set(players);
+async function init() {
+    if (!myRole) { render(); return; }
+    try {
+        await firebase.auth().signInAnonymously();
+    } catch (e) {
+        console.warn('Anoniminis prisijungimas nepavyko (įjunkite Authentication → Anonymous, jei naudojate taisykles su auth):', e.code || e);
     }
-
-    window.gmDeletePlayer = function(index) {
-        if (!confirm(`Ar tikrai norite pašalinti žaidėją ${players[index].name}?`)) return;
-        players.splice(index, 1);
-        
-        if (players.length === 0) {
-            db.ref('players').remove(); 
-        } else {
-            db.ref('players').set(players);
-        }
-    }
-
-    function renderGMDashboard() {
-        if (myRole !== 'GM') return;
-        
-        const aliveRed = players.filter(p => p.team === 'RAUDONA' && p.isAlive).length;
-        const aliveBlue = players.filter(p => p.team === 'MELYNA' && p.isAlive).length;
-
-        document.getElementById('gm-score').innerHTML = `
-            <div style="display:flex; justify-content:space-between; background:#111; padding:12px; border-radius:8px; border:1px solid #333; margin-bottom: 10px;">
-                <span style="color:var(--red); font-size:1.1rem; font-weight:bold;">RAUDONI: ${aliveRed}</span>
-                <span style="color:var(--blue); font-size:1.1rem; font-weight:bold;">MĖLYNI: ${aliveBlue}</span>
-            </div>
-        `;
-
-        document.getElementById('gm-player-list').innerHTML = players.map((p, index) => `
-            <div class="gm-card" style="opacity: ${p.isAlive ? 1 : 0.4}; border-left-color:${p.team==='RAUDONA'?'var(--red)':'var(--blue)'}">
-                <div class="gm-card-top">
-                    <img src="${p.photo}">
-                    <div class="gm-card-info">
-                        <b style="text-decoration: ${p.isAlive ? 'none' : 'line-through'}">${p.name}</b>
-                        <div class="gm-status">
-                            ${p.isAlive ? '<span style="color:var(--green)">● GYVAS</span>' : '<span style="color:var(--red)">❌ NUKAUTAS</span>'}<br>
-                            NFC: <b style="color:${p.nfcId ? 'var(--gold)' : '#555'}">${p.nfcId ? 'SUSIETAS' : 'NĖRA'}</b><br>
-                            TAŠKAI: <b style="color:white; font-size: 1.1rem;">${p.kills || 0}</b>
-                        </div>
-                    </div>
-                </div>
-                <div class="gm-actions">
-                    <button class="gm-btn" style="background:#444; color:white;" onclick="gmSwapTeam(${index})">KEISTI</button>
-                    <button class="gm-btn" style="background:var(--red); color:white;" onclick="gmDeletePlayer(${index})">ŠALINTI</button>
-                </div>
-            </div>
-        `).join('');
-    }
+    attachListeners();
+    render();
+}
+init();
 </script>
 </body>
 </html>
