@@ -137,6 +137,18 @@
         @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
         @media (max-width: 380px) { #timer { font-size: 5rem; } .target-name { font-size: 3rem; } }
         .two-targets .target-name { font-size: 2.7rem; }
+        .killer-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 18px; max-height: 50vh; overflow-y: auto; }
+        .killer-btn { min-height: 52px; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); font: 600 1rem 'Barlow', sans-serif; cursor: pointer; text-align: left; overflow-wrap: anywhere; }
+        .killer-btn:active { background: #F4F5F7; }
+        .killer-btn.dead { color: var(--muted); border-style: dashed; }
+        .killer-btn small { display: block; font-weight: 500; font-size: 0.78rem; color: var(--muted); }
+        .mode-hint { margin: 12px 0 0; font-size: 0.92rem; color: var(--muted); }
+        .seg { display: flex; gap: 8px; margin-top: 8px; }
+        .seg button { flex: 1; min-height: 64px; padding: 8px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); font: 600 0.95rem 'Barlow', sans-serif; cursor: pointer; }
+        .seg button small { display: block; font-weight: 500; font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+        .seg button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+        .seg button.on small { color: #D9DCE2; }
+        .mode-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; margin-top: 12px; }
         @media (max-width: 380px) { .two-targets .target-name { font-size: 2.3rem; } }
         #gm-targets .stat b { font-size: 1.6rem; white-space: normal; }
     </style>
@@ -206,6 +218,7 @@
         <div id="player-area"></div>
 
         <div id="gm-area" class="hidden">
+            <div id="gm-mode"></div>
             <div id="gm-targets"></div>
             <h3>Žaidėjai</h3>
             <div id="gm-player-list"></div>
@@ -260,8 +273,8 @@
     <div class="modal-box">
         <h3>Taikinys nukautas!</h3>
         <p id="killer-target" style="font: 700 2.2rem/1.1 'Barlow Condensed', sans-serif; margin:4px 0 14px 0;"></p>
-        <p style="margin-bottom:12px;">Nuskenuokite SAVO (žudiko) NFC žymę, kad gautumėte tašką:</p>
-        <button id="btnScanKiller" class="action-btn" style="margin-bottom:20px;" onclick="scanKillerNFC()">Nuskenuoti savo NFC</button>
+        <p style="margin:0 0 10px;">Kas nukovė? Pasirinkite žaidėją:</p>
+        <div id="killer-list" class="killer-list"></div>
         <div class="modal-row">
             <button class="action-btn ghost" style="margin:0;" onclick="closeKillerModal()">Atšaukti</button>
         </div>
@@ -290,7 +303,7 @@
 <script>
 /* ==========================================================================
    DUOMENŲ STRUKTŪRA (Firebase Realtime Database)
-   gameStatus: { phase: 'enlist'|'nfc'|'game'|'ended', startTime, duration, endTime, endReason }
+   gameStatus: { phase: 'enlist'|'nfc'|'game'|'ended', startTime, duration, endTime, endReason, killMode: 'bring'|'tag' }
    players/{id}: { name, team, nfcId, isAlive, kills, joined, killedBy, diedAt }
    log/{pushId}: { type:'kill'|'miss', hunterId?, hunterName?, hunterTeam, targetId?, targetName?, targetTeam?, t }
    Visi duomenys laikomi kambaryje: rooms/{KODAS}/…  (kodas – iš nuorodos ?room=KODAS)
@@ -317,6 +330,14 @@ const firebaseConfig = {
 const DEFAULT_DURATION = 6300;   // 105 min
 const PENALTY_SECONDS = 15;
 const KILL_IDLE_TEXT = "Nuskenuoti taikinio NFC";
+// Nukovimo režimai: abiem atvejais skenuojama nukauto žaidėjo žymė, tada iš sąrašo pasirenkamas žudikas.
+const KILL_MODES = {
+    bring: { title: 'Atvesti į bazę', short: 'Nukautas žaidėjas vedamas į bazę',
+             hint: 'Atveskite nukautą žaidėją į savo bazę ir nuskenuokite jo NFC žymę.' },
+    tag:   { title: 'Atnešti žymę',   short: 'Į bazę nešama tik NFC žymė',
+             hint: 'Paimkite nukauto žaidėjo NFC žymę, atneškite ją į bazę ir nuskenuokite.' }
+};
+const killMode = () => (status.killMode === 'tag' ? 'tag' : 'bring');
 const ROLES = ['GM', 'RAUDONA', 'MELYNA'];
 
 firebase.initializeApp(firebaseConfig);
@@ -863,7 +884,7 @@ async function launchRound() {
     const tForBlue = pickTwo(players.filter(p => p.team === 'RAUDONA'));
     u['log'] = null;
     u['gameStatus'] = {
-        phase: 'game', duration: DEFAULT_DURATION,
+        phase: 'game', duration: DEFAULT_DURATION, killMode: killMode(),
         targets: { RAUDONA: tForRed, MELYNA: tForBlue }
     };
     try { await R().update(u); } catch (e) { dbError(e); }
@@ -917,6 +938,12 @@ function resetGame() {
             } catch (e) { dbError(e); }
         }
     });
+}
+
+function setKillMode(m) {
+    if (!isGM() || !KILL_MODES[m]) return;
+    if (status.startTime) return toast('Režimą galima keisti tik prieš pradedant laiką.', true);
+    R('gameStatus/killMode').set(m).catch(dbError);
 }
 
 function startGlobalTimer() {
@@ -990,7 +1017,7 @@ function gmDeletePlayer(id) {
 
 /* ==========================================================================
    MEDŽIOKLĖ (komandos telefonas)
-   1) nuskenuojama TAIKINIO žymė  2) nuskenuojama ŽUDIKO (savo komandos) žymė
+   1) nuskenuojama nukauto TAIKINIO žymė  2) žudikas pasirenkamas iš savo komandos sąrašo
    ========================================================================== */
 let pendingKill = null;   // taikinys, užfiksuotas nuskenavus jo žymę
 
@@ -1008,6 +1035,7 @@ function killScan() {
         }
         pendingKill = { id: target.id, name: target.name, team: target.team };
         $('killer-target').innerText = target.name;
+        renderKillerList();
         $('killer-modal').classList.remove('hidden');
     });
 }
@@ -1018,17 +1046,24 @@ function closeKillerModal() {
     $('killer-modal').classList.add('hidden');
 }
 
-function scanKillerNFC() {
-    waitForTag('btnScanKiller', 'Nuskenuoti savo NFC', 'Laukiama jūsų NFC... (spauskite, kad atšauktumėte)', async serial => {
-        const t = pendingKill;
-        if (!t) return;
-        if (!isRunning()) { closeKillerModal(); return toast('Laikmatis nevyksta – nukovimas negalimas.', true); }
-        // Dead players can score: gyvumo nepatikriname, tik komandą ir žymę.
-        const hunter = players.find(p => p.team === myRole && p.nfcId === serial);
-        if (!hunter) return toast('Klaida: ši NFC žymė nepriklauso jūsų komandai arba žaidėjas nerastas!', true, 4000);
-        closeKillerModal();
-        await confirmKill(hunter, t);
-    });
+function renderKillerList() {
+    const mine = players.filter(p => p.team === myRole)
+        .sort((x, y) => (y.isAlive ? 1 : 0) - (x.isAlive ? 1 : 0) || x.name.localeCompare(y.name, 'lt'));
+    $('killer-list').innerHTML = mine.length ? mine.map(p => `
+        <button class="killer-btn ${p.isAlive ? '' : 'dead'}" data-id="${esc(p.id)}" onclick="pickKiller(this.dataset.id)">
+            ${esc(p.name)}${p.isAlive ? '' : '<small>nukautas</small>'}
+        </button>`).join('') : '<p class="muted">Komandoje nėra žaidėjų.</p>';
+}
+
+// Dead players can score: rodomi visi komandos žaidėjai, ir gyvi, ir nukauti.
+async function pickKiller(id) {
+    const t = pendingKill;
+    if (!t) return;
+    if (!isRunning()) { closeKillerModal(); return toast('Laikmatis nevyksta – nukovimas negalimas.', true); }
+    const hunter = players.find(p => p.id === id && p.team === myRole);
+    if (!hunter) return toast('Žaidėjas nerastas – pasirinkite iš naujo.', true);
+    closeKillerModal();
+    await confirmKill(hunter, t);
 }
 
 function logMiss() {
@@ -1133,7 +1168,8 @@ function renderHunter() {
         body = `
             <div class="lbl">${lbl}</div>
             ${rows}
-            <button id="killBtn" class="action-btn" onclick="killScan()">${KILL_IDLE_TEXT}</button>`;
+            <button id="killBtn" class="action-btn" onclick="killScan()">${KILL_IDLE_TEXT}</button>
+            <p class="mode-hint"><b>${KILL_MODES[killMode()].title}.</b> ${KILL_MODES[killMode()].hint}</p>`;
     } else if (!players.length) {
         body = `<p class="muted" style="margin:0;">Kraunama...</p>`;
     } else if (aliveEnemies(myRole).length) {
@@ -1150,6 +1186,13 @@ function renderGM() {
     $('btnStartTimer').classList.toggle('hidden', started);
     $('btnEndGame').classList.toggle('hidden', !started);
 
+    const km = killMode();
+    $('gm-mode').innerHTML = started
+        ? `<div class="mode-card"><span class="lbl">Nukovimo režimas</span><div style="font-weight:700; margin-top:2px;">${KILL_MODES[km].title}</div><div class="muted small">${KILL_MODES[km].short}</div></div>`
+        : `<div class="mode-card"><span class="lbl">Nukovimo režimas (keičiamas iki laiko pradžios)</span>
+            <div class="seg">${Object.keys(KILL_MODES).map(k => `
+                <button class="${k === km ? 'on' : ''}" onclick="setKillMode('${k}')">${KILL_MODES[k].title}<small>${KILL_MODES[k].short}</small></button>`).join('')}
+            </div></div>`;
     const names = tm => { const l = getTeamTargets(tm); return l.length ? l.map(x => esc(x.name)).join('<br>') : '—'; };
     $('gm-targets').innerHTML = `
         <div class="score-strip" style="margin-top:12px;">
