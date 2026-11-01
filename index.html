@@ -1461,9 +1461,20 @@ async function cleanupOldRooms() {
         const codes = [];
         snap.forEach(c => { if (c.key !== ROOM) codes.push(c.key); });
         for (const code of codes) {
-            try { await db.ref('rooms/' + code).remove(); await db.ref('roomIndex/' + code).remove(); } catch (e) {}
+            try { await db.ref('rooms/' + code).remove(); await db.ref('roomIndex/' + code).remove(); await db.ref('roomList/' + code).remove(); } catch (e) {}
         }
     } catch (e) { /* taisyklės dar neatnaujintos ar nėra ryšio – nieko tokio */ }
+}
+
+// Kambarys įrašomas į viešą atvirų kambarių sąrašą (rodomas kūrimo puslapyje). Tik GM.
+let listedOnce = false;
+function listRoom() {
+    if (listedOnce || !isGM() || !roomMeta) return;
+    listedOnce = true;
+    db.ref('roomList/' + ROOM).update({
+        name: roomMeta.name || '',
+        createdAt: roomMeta.createdAt || firebase.database.ServerValue.TIMESTAMP
+    }).catch(() => { listedOnce = false; });
 }
 
 function startGlobalTimer() {
@@ -1949,6 +1960,7 @@ function render() {
     if (roomMeta === undefined) { waitScreen('Jungiamasi...', ''); return; }
     if (!myRole) { show('screen-role'); return; }
     if (myRole === 'GM' && !isGM()) { show('screen-pin'); renderPin(); return; }
+    if (myRole === 'GM') listRoom();
 
     const ph = phase();
     if (ph !== 'game' && pendingKill) closeKillerModal();

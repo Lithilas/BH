@@ -64,6 +64,13 @@
           ".write": "auth != null && data.exists() && newData.isNumber() && newData.val() <= now && root.child('rooms').child($code).child('gms').child(auth.uid).exists()"
         }
       }
+    },
+    "roomList": {
+      ".read": "auth != null",
+      "$code": {
+        ".write": "auth != null && ((newData.exists() && root.child('rooms').child($code).child('gms').child(auth.uid).exists()) || (!newData.exists() && !root.child('rooms').child($code).exists()))",
+        ".validate": "!newData.exists() || (newData.hasChildren(['createdAt']) && newData.child('createdAt').isNumber() && (!newData.child('name').exists() || (newData.child('name').isString() && newData.child('name').val().length <= 60)))"
+      }
     }
   }
 }
