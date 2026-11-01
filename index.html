@@ -66,6 +66,16 @@
         .award .aw-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
         .award .aw-why { font-size: 0.82rem; color: var(--muted); }
         .award.wide { grid-column: 1 / -1; }
+        .help-btn { margin-top: 12px; }
+        .help-state { margin-top: 12px; border: 1px solid var(--line-strong); border-radius: 14px; padding: 12px 14px; background: var(--surface); font-weight: 600; display: flex; align-items: center; gap: 10px; }
+        .help-state.ok { border-color: var(--green); color: var(--green); }
+        .help-state .muted { font-weight: 500; }
+        .gm-help { background: var(--ink); color: #fff; border-radius: 16px; padding: 14px 16px; margin-top: 12px; display: flex; align-items: center; gap: 12px; animation: pulseHelp 1.4s ease-in-out infinite; }
+        .gm-help .gh-txt { flex: 1; min-width: 0; }
+        .gm-help .gh-title { font: 700 1.35rem/1.1 'Barlow Condensed', sans-serif; }
+        .gm-help .gh-sub { font-size: .88rem; color: #D9DCE2; }
+        .gm-help button { flex: 0 0 auto; min-height: 48px; padding: 8px 18px; border-radius: 12px; border: none; background: #fff; color: var(--ink); font: 700 1rem 'Barlow', sans-serif; cursor: pointer; }
+        @keyframes pulseHelp { 50% { box-shadow: 0 0 0 6px rgba(20,23,28,.18); } }
         .assign-head { display: flex; align-items: center; margin: 18px 0 4px; font-size: 1rem; color: var(--muted); }
         .assign-done { margin: 14px 0 0; font-weight: 600; color: var(--green); display: flex; align-items: center; }
         .paid-sum { margin: 10px 0 0; font-size: 0.92rem; color: var(--muted); }
@@ -263,10 +273,11 @@
         <div id="player-area"></div>
 
         <div id="gm-area" class="hidden">
+            <div id="gm-help"></div>
             <div id="gm-mode"></div>
             <div id="gm-targets"></div>
             <h3>Žaidėjai</h3>
-            <input type="search" id="gmSearch" placeholder="Ieškoti žaidėjo (slapyvardis ar vardas)" autocomplete="off" style="margin:8px 0 0;" oninput="renderGM()">
+            <input type="text" id="gmSearch" placeholder="Ieškoti žaidėjo (slapyvardis ar vardas)" autocomplete="off" style="margin:8px 0 0;" oninput="renderGM()">
             <p id="gm-list-sum" class="muted small" style="margin:8px 0 0;"></p>
             <div id="gm-player-list"></div>
 
@@ -835,7 +846,8 @@ setInterval(() => {
     autoEndCheck();
     if (isRunning()) {
         ensureTargets();
-        if (myRole === 'GM' && isGM() && phase() === 'game') renderGMTargets();
+        if (myRole === 'GM' && isGM() && phase() === 'game') renderGMTargetsAndHelp();
+        else if (myRole !== 'GM' && phase() === 'game') renderHelpTeam();
     }
     // Prasidėjus „Medžioklės valandai“ – signalas ir ekrano atnaujinimas (vieną kartą).
     const fin = isFinalPhase();
@@ -1685,6 +1697,8 @@ function renderScore() {
 
 function feedLine(l) {
     const tm = `<span class="ft">${fmtElapsed(l.t)}</span>`;
+    if (l.type === 'help') return `<div class="feed-line miss">${tm}<b style="color:${teamColor(l.hunterTeam)}">${teamLabel(l.hunterTeam)} komanda</b> iškvietė GM pagalbą</div>`;
+    if (l.type === 'help-ack') return `<div class="feed-line miss">${tm}GM vyksta pas <b style="color:${teamColor(l.hunterTeam)}">${teamLabel(l.hunterTeam)} komandą</b></div>`;
     if (l.type === 'miss') {
         const who = l.hunterName ? nameSpan(l.hunterName, l.hunterTeam)
             : `<b style="color:${teamColor(l.hunterTeam)}">${teamLabel(l.hunterTeam)} komanda</b>`;
@@ -1700,6 +1714,82 @@ function renderFeed(containerId, limit) {
     if (!c) return;
     const items = logs.filter(l => myRole === 'GM' || l.type === 'kill').slice(-limit).reverse();
     c.innerHTML = items.length ? items.map(feedLine).join('') : '<div class="feed-empty">Kol kas nieko nenutiko.</div>';
+}
+
+/* ==========================================================================
+   PAGALBOS IŠKVIETIMAS: komanda kviečia GM, GM atsako „Vykstu“.
+   Naudojamas žurnalas (log): { type:'help', hunterTeam } ir { type:'help-ack', hunterTeam, ref }.
+   ========================================================================== */
+const HELP_COOLDOWN_SEC = 120;     // tiek laukti, kol galima kviesti dar kartą
+const HELP_OPEN_MIN = 10;          // neatsakytas kvietimas nebelaikomas aktyviu po tiek minučių
+const HELP_ACK_SHOW_MIN = 3;       // kiek laiko komandai rodoma „GM atvyksta“
+function helpState(team) {
+    const calls = logs.filter(l => l.type === 'help' && l.hunterTeam === team && l.t);
+    const last = calls[calls.length - 1];
+    if (!last) return null;
+    const ack = logs.find(l => l.type === 'help-ack' && l.ref === last.id);
+    const age = now() - last.t;
+    return { id: last.id, t: last.t, age, ack: ack || null,
+             open: !ack && age < HELP_OPEN_MIN * 60000 };
+}
+function callHelp() {
+    if (!isRunning() || myRole === 'GM') return;
+    const st = helpState(myRole);
+    if (st && st.age < HELP_COOLDOWN_SEC * 1000) return toast('GM jau iškviestas. Palaukite.', true);
+    askConfirm({
+        title: 'Kviesti GM?',
+        text: 'Žaidimo vedėjas gaus pranešimą, kad jūsų komandai reikia pagalbos (pvz., priešai per daug spaudžia).',
+        okLabel: 'Kviesti GM',
+        onOk: () => R('log').push({ type: 'help', hunterTeam: myRole, t: firebase.database.ServerValue.TIMESTAMP })
+            .then(() => toast('GM iškviestas.')).catch(dbError)
+    });
+}
+function ackHelp(team, ref) {
+    if (!isGM()) return;
+    R('log').push({ type: 'help-ack', hunterTeam: team, ref: ref, t: firebase.database.ServerValue.TIMESTAMP })
+        .then(() => toast('Komanda informuota, kad vykstate.')).catch(dbError);
+}
+// Komandos telefone: mygtukas arba būsena.
+let ackSeen = null;
+function renderHelpTeam() {
+    const box = $('help-area');
+    if (!box) return;
+    if (!isRunning()) { box.innerHTML = ''; return; }
+    const st = helpState(myRole);
+    if (st && st.ack && now() - st.ack.t < HELP_ACK_SHOW_MIN * 60000) {
+        if (ackSeen !== st.ack.id) { if (ackSeen !== null) { feedback('scan'); toast('GM atvyksta!'); } ackSeen = st.ack.id; }
+        box.innerHTML = `<div class="help-state ok"><i class="dot ok"></i>GM atvyksta</div>`;
+        return;
+    }
+    if (ackSeen === null) ackSeen = st && st.ack ? st.ack.id : '';
+    if (st && st.open) {
+        const left = Math.max(0, HELP_COOLDOWN_SEC - Math.floor(st.age / 1000));
+        box.innerHTML = `<div class="help-state"><i class="dot"></i>GM iškviestas – laukiama atsakymo
+            <span class="muted">${left ? '· dar kartą po ' + fmt(left) : ''}</span></div>
+            ${left ? '' : `<button class="action-btn ghost help-btn" onclick="callHelp()">Kviesti GM dar kartą</button>`}`;
+        return;
+    }
+    box.innerHTML = `<button class="action-btn ghost help-btn" onclick="callHelp()">Kviesti GM pagalbą</button>`;
+}
+// GM telefone: ryškus pranešimas su „Vykstu“, kol neatsakyta; garsas kas 30 s.
+const helpAlerted = {};
+let lastHelpBuzz = 0;
+function renderHelpGM() {
+    const box = $('gm-help');
+    if (!box) return;
+    if (!isGM() || phase() !== 'game') { box.innerHTML = ''; return; }
+    const open = ['RAUDONA', 'MELYNA'].map(tm => Object.assign({ team: tm }, helpState(tm) || {})).filter(x => x.open);
+    box.innerHTML = open.map(h => `
+        <div class="gm-help">
+            <div class="gh-txt">
+                <div class="gh-title"><i class="dot" style="background:${teamColor(h.team)}"></i>${teamLabel(h.team)} komanda kviečia pagalbos</div>
+                <div class="gh-sub">prieš ${fmt(Math.max(0, Math.floor(h.age / 1000)))}</div>
+            </div>
+            <button onclick="ackHelp('${h.team}','${esc(h.id)}')">Vykstu</button>
+        </div>`).join('');
+    let fresh = false;
+    open.forEach(h => { if (!helpAlerted[h.id]) { helpAlerted[h.id] = true; fresh = true; } });
+    if (fresh || (open.length && Date.now() - lastHelpBuzz > 30000)) { lastHelpBuzz = Date.now(); feedback('final'); }
 }
 
 // Kai komandai paskiriamas naujas taikinys – vibracija ir garsas (ne iškart po savo nukovimo garso).
@@ -1782,8 +1872,9 @@ function renderHunter() {
     } else {
         body = `<h1 style="color:var(--green); margin:0;">Misija įvykdyta</h1>`;
     }
-    el.innerHTML = teamLine + finalBanner + `<div class="target-frame">${body}</div>`;
+    el.innerHTML = teamLine + finalBanner + `<div class="target-frame">${body}</div><div id="help-area"></div>`;
     updateKillBtn();
+    renderHelpTeam();
 }
 
 function renderGM() {
@@ -1833,6 +1924,7 @@ function renderGM() {
     }).join('');
 }
 
+function renderGMTargetsAndHelp() { renderGMTargets(); renderHelpGM(); }
 function renderGMTargets() {
     const el = $('gm-targets');
     if (!el) return;
@@ -1856,7 +1948,7 @@ function renderGame() {
     updateTimerText();
     renderScore();
     renderFeed('feed', gm ? 40 : 8);
-    if (gm) renderGM(); else renderHunter();
+    if (gm) { renderGM(); renderHelpGM(); } else renderHunter();
 }
 
 const END_REASONS = {
@@ -2013,7 +2105,10 @@ function attachListeners() {
         const arr = [];
         snap.forEach(c => { const v = c.val(); if (v) arr.push(Object.assign({}, v, { id: c.key })); });
         logs = arr;
-        if (phase() === 'game') renderFeed('feed', myRole === 'GM' ? 40 : 8);
+        if (phase() === 'game') {
+            renderFeed('feed', myRole === 'GM' ? 40 : 8);
+            if (myRole === 'GM') renderHelpGM(); else renderHelpTeam();
+        }
         if (phase() === 'ended') renderFeed('end-feed', 100);
     }, dbError);
 
