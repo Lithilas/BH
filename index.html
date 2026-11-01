@@ -49,7 +49,24 @@
         .unpaid-note { font-weight: 700; color: var(--ink); }
         .pill.unpaid { background: var(--surface); color: var(--muted); border: 1px dashed var(--line-strong); }
         .player-card .pc-acts { display: flex; gap: 6px; flex: 0 0 auto; }
-.assign-head { display: flex; align-items: center; margin: 18px 0 4px; font-size: 1rem; color: var(--muted); }
+        .contract { position: fixed; inset: 0; z-index: 9998; background: rgba(20,23,28,0.82); display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .contract-box { background: var(--surface); border-radius: 22px; width: 100%; max-width: 420px; padding: 22px 20px 18px; text-align: center; border-top: 6px solid var(--ink); animation: pop .25s ease-out; }
+        @keyframes pop { from { transform: scale(.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .contract-kicker { font: 700 0.85rem 'Barlow', sans-serif; letter-spacing: .14em; color: var(--muted); }
+        .contract-title { font: 700 2.1rem/1.05 'Barlow Condensed', sans-serif; margin: 2px 0 14px; }
+        .contract-row { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0; }
+        .contract-row + .contract-row { border-top: 1px solid var(--line); }
+        .contract-row .nm { font: 700 2rem/1.05 'Barlow Condensed', sans-serif; overflow-wrap: anywhere; }
+        .contract-foot { margin: 12px 0 0; color: var(--muted); font-size: 0.9rem; }
+        .final-banner { background: var(--ink); color: #fff; border-radius: 14px; padding: 12px 16px; margin: 0 0 14px; display: flex; align-items: center; gap: 10px; font-weight: 600; }
+        .final-banner b { font: 700 1.3rem 'Barlow Condensed', sans-serif; }
+        .awards { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 10px; margin-top: 10px; }
+        .award { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 12px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+        .award .aw-title { font: 700 1.15rem 'Barlow Condensed', sans-serif; }
+        .award .aw-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+        .award .aw-why { font-size: 0.82rem; color: var(--muted); }
+        .award.wide { grid-column: 1 / -1; }
+        .assign-head { display: flex; align-items: center; margin: 18px 0 4px; font-size: 1rem; color: var(--muted); }
         .assign-done { margin: 14px 0 0; font-weight: 600; color: var(--green); display: flex; align-items: center; }
         .paid-sum { margin: 10px 0 0; font-size: 0.92rem; color: var(--muted); }
 
@@ -270,6 +287,7 @@
         <h2 style="margin-top:10px; margin-bottom:0;">Žaidimas baigtas</h2>
         <div id="end-summary"></div>
         <div id="end-board-wrap">
+            <div id="end-awards"></div>
             <h3 style="margin-top:20px;">Taškų lentelė</h3>
             <div id="end-board"></div>
         </div>
@@ -311,6 +329,16 @@
         <div class="modal-row">
             <button class="action-btn ghost" style="margin:0;" onclick="closeKillerModal()">Atšaukti</button>
         </div>
+    </div>
+</div>
+
+<!-- Naujas kontraktas (komandos telefone) -->
+<div id="contract" class="contract hidden" onclick="hideContract()">
+    <div class="contract-box">
+        <div class="contract-kicker">IEŠKOMAS</div>
+        <div class="contract-title" id="contract-title">Naujas kontraktas</div>
+        <div id="contract-list"></div>
+        <p class="contract-foot">Kontraktas galioja 15 min. · Palieskite, kad uždarytumėte</p>
     </div>
 </div>
 
@@ -385,6 +413,9 @@ const CONTRACT_MIN = 15, FULL_MIN = 5, MAX_POINTS = 10, HUNTED_MULT = 3;
 // Pasibaigus kontraktui, seno taikinio žymę dar LATE_MIN min. galima nuskenuoti (vertė 1 tšk.),
 // kad nebūtų baudžiama, jei jis buvo nukautas, bet žymė dar nešama į bazę.
 const LATE_MIN = 5;
+// „Medžioklės valanda“: paskutinėmis FINAL_MIN min. visi taškai dauginami iš FINAL_MULT (kartu su ×3).
+const FINAL_MIN = 15, FINAL_MULT = 2;
+const isFinalPhase = () => isRunning() && remainingSec() <= FINAL_MIN * 60;
 const otherTeam = t => t === 'RAUDONA' ? 'MELYNA' : 'RAUDONA';
 const ROLES = ['GM', 'RAUDONA', 'MELYNA'];
 
@@ -564,7 +595,9 @@ const FEEDBACK = {
     scan:   { vib: 80,                      tones: [[880, 0, 0.12]] },                       // taikinio žymė atpažinta
     kill:   { vib: [90, 60, 90],            tones: [[880, 0, 0.12], [1320, 0.15, 0.2]] },   // nukovimas patvirtintas
     bad:    { vib: 450,                     tones: [[220, 0, 0.4]] },                        // klaidinga žymė
-    target: { vib: [160, 90, 160, 90, 160], tones: [[660, 0, 0.14], [990, 0.18, 0.22]] }    // naujas taikinys
+    target: { vib: [160, 90, 160, 90, 160], tones: [[660, 0, 0.14], [990, 0.18, 0.22]] },   // naujas taikinys
+    final:  { vib: [500, 150, 500, 150, 800],                                                // medžioklės valanda (sirena)
+              tones: [[600, 0, 0.35], [900, 0.4, 0.35], [600, 0.8, 0.35], [900, 1.2, 0.5]] }
 };
 let lastFeedback = 0;
 function feedback(kind) {
@@ -804,7 +837,15 @@ setInterval(() => {
         ensureTargets();
         if (myRole === 'GM' && isGM() && phase() === 'game') renderGMTargets();
     }
+    // Prasidėjus „Medžioklės valandai“ – signalas ir ekrano atnaujinimas (vieną kartą).
+    const fin = isFinalPhase();
+    if (fin !== wasFinal) {
+        if (fin && wasFinal === false && myRole !== 'GM') feedback('final');
+        wasFinal = fin;
+        if (phase() === 'game') renderGame();
+    }
 }, 1000);
+let wasFinal = null;
 
 /* ==========================================================================
    NUBAUDA UŽ KLAIDINGĄ NUSKENAVIMĄ (išlieka po perkrovimo)
@@ -1524,6 +1565,8 @@ function killScan() {
         pendingKill = {
             id: target.id, name: target.name, team: target.team,
             value: lateHit ? 1 : contractValue(target.at),
+            final: isFinalPhase(),
+            age: lateHit ? null : Math.max(0, now() - (slotStart(target.at) || now())),
             huntedIds: getTeamTargets(otherTeam(myRole)).map(x => x.id)
         };
         $('killer-target').innerHTML = `<span style="display:flex; align-items:center; gap:12px;">${avatar(target, 56)}<span>${esc(target.name)}${target.realName ? ` <span class="muted" style="font: 500 1rem 'Barlow', sans-serif;">${esc(target.realName)}</span>` : ''}</span></span>`;
@@ -1557,7 +1600,8 @@ async function pickKiller(id) {
     if (!hunter) return toast('Žaidėjas nerastas – pasirinkite iš naujo.', true);
     closeKillerModal();
     const triple = t.huntedIds.includes(hunter.id);
-    await confirmKill(hunter, t, t.value * (triple ? HUNTED_MULT : 1), triple);
+    const pts = t.value * (triple ? HUNTED_MULT : 1) * (t.final ? FINAL_MULT : 1);
+    await confirmKill(hunter, t, pts, triple, t.final, t.age);
 }
 
 function logMiss() {
@@ -1568,7 +1612,7 @@ function logMiss() {
 
 // Atominis nukovimas: transakcija užtikrina, kad taikinys miršta tik kartą
 // ir tašką gauna tik tas medžiotojas, kuriam transakcija pavyko.
-async function confirmKill(hunter, target, pts, triple) {
+async function confirmKill(hunter, target, pts, triple, final, age) {
     pts = pts || 1;
     try {
         const res = await R('players/' + target.id).transaction(p => {
@@ -1593,7 +1637,8 @@ async function confirmKill(hunter, target, pts, triple) {
             type: 'kill',
             hunterId: hunter.id, hunterName: hunter.name, hunterTeam: hunter.team,
             targetId: target.id, targetName: target.name, targetTeam: target.team,
-            points: pts, hunted: !!triple,
+            points: pts, hunted: !!triple, final: !!final,
+            ...(typeof age === 'number' ? { age: Math.round(age) } : {}),
             t: firebase.database.ServerValue.TIMESTAMP
         });
         toast(`Nukovimas patvirtintas: ${hunter.name}`);   // taškai slapti iki pabaigos
@@ -1635,7 +1680,8 @@ function feedLine(l) {
         return `<div class="feed-line miss">${tm}${who} nuskenavo klaidingą žymę</div>`;
     }
     const showPts = l.points && (myRole === 'GM' || status.revealed);
-    const pts = showPts ? ` <span class="muted">+${l.points}${l.hunted ? ' (×' + HUNTED_MULT + ')' : ''}</span>` : '';
+    const mult = [l.hunted ? '×' + HUNTED_MULT : '', l.final ? '×' + FINAL_MULT : ''].filter(Boolean).join(', ');
+    const pts = showPts ? ` <span class="muted">+${l.points}${mult ? ' (' + mult + ')' : ''}</span>` : '';
     return `<div class="feed-line">${tm}${nameSpan(l.hunterName, l.hunterTeam)} nukovė ${nameSpan(l.targetName, l.targetTeam)}${pts}</div>`;
 }
 function renderFeed(containerId, limit) {
@@ -1647,13 +1693,42 @@ function renderFeed(containerId, limit) {
 
 // Kai komandai paskiriamas naujas taikinys – vibracija ir garsas (ne iškart po savo nukovimo garso).
 let prevTargetIds = null;
+let startContractShown = null;   // kuriam startui jau parodėme pirmuosius kontraktus
 function noticeNewTargets(targets) {
     const ids = targets.map(t => t.id);
-    if (prevTargetIds && isRunning() && ids.some(id => !prevTargetIds.includes(id))) {
+    let fresh = [];
+    if (prevTargetIds && isRunning()) fresh = targets.filter(t => !prevTargetIds.includes(t.id));
+    else if (!prevTargetIds && isRunning() && targets.length && startContractShown !== status.startTime
+             && now() - status.startTime < 60000) {
+        fresh = targets;                       // ką tik prasidėjęs žaidimas – pirmieji kontraktai
+    }
+    if (status.startTime) startContractShown = status.startTime;
+    if (fresh.length) {
         const wait = Math.max(0, 900 - (Date.now() - lastFeedback));
-        setTimeout(() => feedback('target'), wait);
+        setTimeout(() => { feedback('target'); showContract(fresh); }, wait);
     }
     prevTargetIds = ids;
+}
+let contractTimer = null;
+function showContract(list) {
+    if (!isRunning() || myRole === 'GM') return;
+    const alive = list.map(t => players.find(p => p.id === t.id)).filter(p => p && p.isAlive);
+    if (!alive.length) return;
+    $('contract-title').innerText = alive.length > 1 ? 'Nauji kontraktai' : 'Naujas kontraktas';
+    $('contract-list').innerHTML = alive.map(p => `
+        <div class="contract-row">
+            ${avatar(p, alive.length > 1 ? 96 : 140)}
+            <div class="nm">${esc(p.name)}</div>
+            ${p.realName ? `<div class="muted">${esc(p.realName)}</div>` : ''}
+            <div class="muted small"><i class="dot" style="background:${teamColor(p.team)}"></i>${teamLabel(p.team)} komanda</div>
+        </div>`).join('');
+    $('contract').classList.remove('hidden');
+    clearTimeout(contractTimer);
+    contractTimer = setTimeout(hideContract, 8000);
+}
+function hideContract() {
+    clearTimeout(contractTimer);
+    $('contract').classList.add('hidden');
 }
 
 function renderHunter() {
@@ -1661,6 +1736,7 @@ function renderHunter() {
     const teamLine = `<div class="team-line"><i class="dot" style="background:${teamColor(myRole)}"></i><span style="color:${teamColor(myRole)}">${teamLabel(myRole)} komanda</span></div>`;
     if (!status.startTime) {
         prevTargetIds = null;
+        hideContract();
         el.innerHTML = teamLine + `
             <div class="target-frame">
                 <h2>Žaidimas dar neprasidėjo</h2>
@@ -1670,6 +1746,8 @@ function renderHunter() {
     }
     const targets = getTeamTargets(myRole);
     noticeNewTargets(targets);
+    const finalBanner = isFinalPhase()
+        ? `<div class="final-banner"><b>Medžioklės valanda</b> visi taškai ×${FINAL_MULT}</div>` : '';
     let body;
     if (targets.length) {
         const rows = targets.map((t, i) => `
@@ -1693,7 +1771,7 @@ function renderHunter() {
     } else {
         body = `<h1 style="color:var(--green); margin:0;">Misija įvykdyta</h1>`;
     }
-    el.innerHTML = teamLine + `<div class="target-frame">${body}</div>`;
+    el.innerHTML = teamLine + finalBanner + `<div class="target-frame">${body}</div>`;
     updateKillBtn();
 }
 
@@ -1703,12 +1781,13 @@ function renderGM() {
     $('btnEndGame').classList.toggle('hidden', !started);
 
     const km = killMode();
-    $('gm-mode').innerHTML = started
+    const fb = isFinalPhase() ? `<div class="final-banner" style="margin-top:12px;"><b>Medžioklės valanda</b> visi taškai ×${FINAL_MULT}</div>` : '';
+    $('gm-mode').innerHTML = fb + (started
         ? `<div class="mode-card"><span class="lbl">Nukovimo režimas</span><div style="font-weight:700; margin-top:2px;">${KILL_MODES[km].title}</div><div class="muted small">${KILL_MODES[km].short}</div></div>`
         : `<div class="mode-card"><span class="lbl">Nukovimo režimas (keičiamas iki laiko pradžios)</span>
             <div class="seg">${Object.keys(KILL_MODES).map(k => `
                 <button class="${k === km ? 'on' : ''}" onclick="setKillMode('${k}')">${KILL_MODES[k].title}<small>${KILL_MODES[k].short}</small></button>`).join('')}
-            </div></div>`;
+            </div></div>`);
     renderGMTargets();
 
     // Gyvi viršuje, nukauti apačioje; paieška pagal slapyvardį ar vardą.
@@ -1775,6 +1854,41 @@ const END_REASONS = {
     gm: 'Žaidimą užbaigė GM.'
 };
 
+// Apdovanojimai iš nukovimų žurnalo ir žaidėjų taškų.
+function computeAwards() {
+    const kills = logs.filter(l => l.type === 'kill' && l.hunterId).sort((a, b) => (a.t || 0) - (b.t || 0));
+    const pById = id => players.find(p => p.id === id);
+    const top = countFn => {
+        const m = {};
+        kills.forEach(l => { const v = countFn(l); if (v) m[l.hunterId] = (m[l.hunterId] || 0) + v; });
+        const best = Object.keys(m).sort((a, b) => m[b] - m[a])[0];
+        return best ? { id: best, n: m[best] } : null;
+    };
+    const out = [];
+    const ranked = players.slice().sort((a, b) => (b.points || 0) - (a.points || 0));
+    if (ranked[0] && (ranked[0].points || 0) > 0)
+        out.push({ title: 'Medžiotojas', p: ranked[0], why: `${ranked[0].points} tšk. · ${ranked[0].kills || 0} nukov.`, wide: true });
+    const kam = top(l => l.hunted ? 1 : 0);
+    if (kam) out.push({ title: 'Kamikadzė', p: pById(kam.id), why: `${kam.n} nukov. būdamas taikiniu (×${HUNTED_MULT})` });
+    const fin = top(l => l.final ? 1 : 0);
+    if (fin) out.push({ title: 'Medžioklės valandos meistras', p: pById(fin.id), why: `${fin.n} nukov. per paskutines ${FINAL_MIN} min.` });
+    if (kills[0]) out.push({ title: 'Pirmasis kraujas', p: pById(kills[0].hunterId), why: `${kills[0].targetName || ''} · ${fmtElapsed(kills[0].t)}` });
+    const fast = kills.filter(l => typeof l.age === 'number').sort((a, b) => a.age - b.age)[0];
+    if (fast) out.push({ title: 'Greičiausias kontraktas', p: pById(fast.hunterId), why: `${fast.targetName || ''} per ${fmt(Math.max(1, Math.round(fast.age / 1000)))}` });
+    return out.filter(a => a.p);
+}
+function renderAwards() {
+    const list = computeAwards();
+    $('end-awards').innerHTML = list.length ? `<h3 style="margin-top:20px;">Apdovanojimai</h3><div class="awards">${list.map(a => `
+        <div class="award${a.wide ? ' wide' : ''}">
+            ${avatar(a.p, a.wide ? 96 : 72)}
+            <div class="aw-title">${esc(a.title)}</div>
+            <div class="aw-name"><i class="dot" style="background:${teamColor(a.p.team)}"></i>${esc(a.p.name)}</div>
+            ${a.p.realName ? `<div class="aw-why" style="margin-top:-4px;">${esc(a.p.realName)}</div>` : ''}
+            <div class="aw-why">${esc(a.why)}</div>
+        </div>`).join('')}</div>` : '';
+}
+
 function renderEnd() {
     const gm = myRole === 'GM';
     const open = gm || !!status.revealed;          // taškai matomi GM, o kitiems – tik paskelbus
@@ -1812,13 +1926,13 @@ function renderEnd() {
 
     $('end-board-wrap').classList.toggle('hidden', !open);
     if (open) {
+        renderAwards();
         const sorted = players.slice().sort((x, y) =>
             (y.points || 0) - (x.points || 0) || (y.kills || 0) - (x.kills || 0) || x.name.localeCompare(y.name, 'lt'));
-        const top = sorted.length ? (sorted[0].points || 0) : 0;
         $('end-board').innerHTML = sorted.map((p, i) => `
             <div class="board-row">
                 <span class="rank">${i + 1}.</span>
-                <span class="nm">${avatar(p, 34)}<i class="dot" style="background:${teamColor(p.team)}; margin-right:0;"></i><span style="overflow:hidden; text-overflow:ellipsis; min-width:0;">${esc(p.name)}${realSmall(p)}</span>${top > 0 && (p.points || 0) === top ? '<span class="pill ok">Lyderis</span>' : ''}</span>
+                <span class="nm">${avatar(p, 34)}<i class="dot" style="background:${teamColor(p.team)}; margin-right:0;"></i><span style="overflow:hidden; text-overflow:ellipsis; min-width:0;">${esc(p.name)}${realSmall(p)}</span></span>
                 <span class="kc">${p.kills || 0} nukov.</span>
                 <b>${p.points || 0}</b>
             </div>`).join('');
