@@ -76,6 +76,9 @@
         .gm-help .gh-sub { font-size: .88rem; color: #D9DCE2; }
         .gm-help button { flex: 0 0 auto; min-height: 48px; padding: 8px 18px; border-radius: 12px; border: none; background: #fff; color: var(--ink); font: 700 1rem 'Barlow', sans-serif; cursor: pointer; }
         @keyframes pulseHelp { 50% { box-shadow: 0 0 0 6px rgba(20,23,28,.18); } }
+        .dchk { display: inline-flex; align-items: center; font-size: .8rem; color: var(--muted); white-space: nowrap; margin-left: 4px; }
+        .dchk .dot { width: 8px; height: 8px; margin-right: 4px; }
+        .dchk.bad { color: var(--ink); font-weight: 700; }
         .assign-head { display: flex; align-items: center; margin: 18px 0 4px; font-size: 1rem; color: var(--muted); }
         .assign-done { margin: 14px 0 0; font-weight: 600; color: var(--green); display: flex; align-items: center; }
         .paid-sum { margin: 10px 0 0; font-size: 0.92rem; color: var(--muted); }
@@ -173,12 +176,6 @@
         .killer-btn.dead { color: var(--muted); border-style: dashed; }
         .killer-btn small { display: block; font-weight: 500; font-size: 0.78rem; color: var(--muted); }
         .mode-hint { margin: 12px 0 0; font-size: 0.92rem; color: var(--muted); }
-        .seg { display: flex; gap: 8px; margin-top: 8px; }
-        .seg button { flex: 1; min-height: 64px; padding: 8px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); font: 600 0.95rem 'Barlow', sans-serif; cursor: pointer; }
-        .seg button small { display: block; font-weight: 500; font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
-        .seg button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
-        .seg button.on small { color: #D9DCE2; }
-        .mode-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; margin-top: 12px; }
         #gm-targets .stat b { font-size: 1.6rem; white-space: normal; }
         .av { flex: 0 0 auto; border-radius: 50%; object-fit: cover; background: #E9EBEF; border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; color: var(--muted); font: 600 0.9rem 'Barlow', sans-serif; overflow: hidden; }
         .target-head { display: flex; align-items: center; gap: 14px; min-width: 0; }
@@ -329,6 +326,18 @@
     </div>
 </div>
 
+<!-- „Mane nukovė“: nukautas žaidėjas pasirenka savo vardą (tik įrašas GM patikrai) -->
+<div id="death-modal" class="modal hidden">
+    <div class="modal-box">
+        <h3>Mane nukovė</h3>
+        <p style="margin:0 0 10px;">Pasirinkite savo vardą:</p>
+        <div id="death-list" class="killer-list"></div>
+        <div class="modal-row">
+            <button class="action-btn ghost" style="margin:0;" onclick="closeDeathModal()">Atšaukti</button>
+        </div>
+    </div>
+</div>
+
 <!-- Killer confirmation (second scan) -->
 <div id="killer-modal" class="modal hidden">
     <div class="modal-box">
@@ -377,10 +386,10 @@
    kambariai kuriami create-game.html puslapyje. Pagrindinis žaidimas – index.html (vienas kambarys). */
 /* ==========================================================================
    DUOMENŲ STRUKTŪRA (Firebase Realtime Database)
-   gameStatus: { phase: 'enlist'|'nfc'|'game'|'ended', startTime, duration, endTime, endReason, killMode: 'bring'|'tag' }
+   gameStatus: { phase: 'enlist'|'nfc'|'game'|'ended', startTime, duration, endTime, endReason }
    players/{id}: { name (slapyvardis), realName?, photo? (100×100 JPEG data URL), team, nfcId,
                    isAlive, kills, points, joined, killedBy, diedAt }
-   log/{pushId}: { type:'kill'|'miss', hunterId?, hunterName?, hunterTeam, targetId?, targetName?, targetTeam?, t }
+   log/{pushId}: { type:'kill'|'miss'|'help'|'help-ack'|'death', hunterId?, hunterName?, hunterTeam, targetId?, targetName?, targetTeam?, t }
    Visi duomenys laikomi kambaryje: rooms/{KODAS}/…  (kodas – iš nuorodos ?room=KODAS)
    rooms/{KODAS}/meta: { name, createdAt }
    rooms/{KODAS}/private/gmKey: GM kodas (klientai jo NIEKADA neskaito; tik taisyklės jį tikrina)
@@ -408,14 +417,8 @@ const firebaseConfig = {
 const DEFAULT_DURATION = 6300;   // 105 min
 const PENALTY_SECONDS = 15;
 const KILL_IDLE_TEXT = "Nuskenuoti taikinio NFC";
-// Nukovimo režimai: abiem atvejais skenuojama nukauto žaidėjo žymė, tada iš sąrašo pasirenkamas žudikas.
-const KILL_MODES = {
-    bring: { title: 'Atvesti į bazę', short: 'Nukautas žaidėjas vedamas į bazę',
-             hint: 'Atveskite nukautą žaidėją į savo bazę ir nuskenuokite jo NFC žymę.' },
-    tag:   { title: 'Atnešti žymę',   short: 'Į bazę nešama tik NFC žymė',
-             hint: 'Paimkite nukauto žaidėjo NFC žymę, atneškite ją į bazę ir nuskenuokite.' }
-};
-const killMode = () => (status.killMode === 'tag' ? 'tag' : 'bring');
+// Nukovimas: paimama nukauto žaidėjo NFC žymė, atnešama į bazę ir nuskenuojama, tada pasirenkamas žudikas.
+const KILL_HINT = 'Paimkite nukauto žaidėjo NFC žymę, atneškite ją į bazę ir nuskenuokite.';
 // Taškai: taikinys paskiriamas CONTRACT_MIN minučių. Pirmas FULL_MIN min. vertė MAX_POINTS,
 // vėliau kas minutę mažėja 1 tašku (bent 1). Pasibaigus kontraktui taikinys pakeičiamas.
 // Jei žudikas tuo metu pats yra priešų taikinys – taškai dauginami iš HUNTED_MULT.
@@ -1397,7 +1400,7 @@ async function launchRound() {
     const tForBlue = pickTwo(players.filter(p => p.team === 'RAUDONA'));
     u['log'] = null;
     u['gameStatus'] = {
-        phase: 'game', duration: DEFAULT_DURATION, killMode: killMode(),
+        phase: 'game', duration: DEFAULT_DURATION,
         targets: { RAUDONA: tForRed, MELYNA: tForBlue }
     };
     try { await R().update(u); } catch (e) { dbError(e); }
@@ -1432,7 +1435,7 @@ function newRoundWipe() {
                 u[b + 'diedAt'] = null;
             });
             u['log'] = null;
-            u['gameStatus'] = { phase: 'nfc', killMode: killMode() };
+            u['gameStatus'] = { phase: 'nfc' };
             try { await R().update(u); } catch (e) { dbError(e); }
         }
     });
@@ -1451,12 +1454,6 @@ function resetGame() {
             } catch (e) { dbError(e); }
         }
     });
-}
-
-function setKillMode(m) {
-    if (!isGM() || !KILL_MODES[m]) return;
-    if (status.startTime) return toast('Režimą galima keisti tik prieš pradedant laiką.', true);
-    R('gameStatus/killMode').set(m).catch(dbError);
 }
 
 function revealResults() {
@@ -1699,6 +1696,7 @@ function renderScore() {
 
 function feedLine(l) {
     const tm = `<span class="ft">${fmtElapsed(l.t)}</span>`;
+    if (l.type === 'death') return `<div class="feed-line miss">${tm}${nameSpan(l.playerName, l.team)} pranešė, kad nukautas</div>`;
     if (l.type === 'help') return `<div class="feed-line miss">${tm}<b style="color:${teamColor(l.hunterTeam)}">${teamLabel(l.hunterTeam)} komanda</b> iškvietė GM pagalbą</div>`;
     if (l.type === 'help-ack') return `<div class="feed-line miss">${tm}GM vyksta pas <b style="color:${teamColor(l.hunterTeam)}">${teamLabel(l.hunterTeam)} komandą</b></div>`;
     if (l.type === 'miss') {
@@ -1709,13 +1707,55 @@ function feedLine(l) {
     const showPts = l.points && (myRole === 'GM' || status.revealed);
     const mult = [l.hunted ? '×' + HUNTED_MULT : '', l.final ? '×' + FINAL_MULT : ''].filter(Boolean).join(', ');
     const pts = showPts ? ` <span class="muted">+${l.points}${mult ? ' (' + mult + ')' : ''}</span>` : '';
-    return `<div class="feed-line">${tm}${nameSpan(l.hunterName, l.hunterTeam)} nukovė ${nameSpan(l.targetName, l.targetTeam)}${pts}</div>`;
+    const chk = myRole === 'GM' ? deathCheck(l) : null;
+    const chkTag = chk ? ` <span class="dchk ${chk.cls}"><i class="dot ${chk.cls === 'ok' ? 'ok' : chk.cls === 'bad' ? 'bad' : ''}"></i>${chk.txt}</span>` : '';
+    return `<div class="feed-line">${tm}${nameSpan(l.hunterName, l.hunterTeam)} nukovė ${nameSpan(l.targetName, l.targetTeam)}${pts}${chkTag}</div>`;
 }
 function renderFeed(containerId, limit) {
     const c = $(containerId);
     if (!c) return;
     const items = logs.filter(l => myRole === 'GM' || l.type === 'kill').slice(-limit).reverse();
     c.innerHTML = items.length ? items.map(feedLine).join('') : '<div class="feed-empty">Kol kas nieko nenutiko.</div>';
+}
+
+/* ==========================================================================
+   „MANE NUKOVĖ“: nukautas žaidėjas savo komandos telefone pažymi, kad žuvo.
+   Tai tik įrašas (log type:'death') – nukovimų neblokuoja. GM po žaidimo mato,
+   ar auka pranešė ir ar ne anksčiau, nei tapo taikiniu (žymė paimta iš anksto).
+   ========================================================================== */
+function openDeathModal() {
+    if (!isRunning() || myRole === 'GM') return;
+    const mine = players.filter(p => p.team === myRole)
+        .sort((x, y) => (y.isAlive ? 1 : 0) - (x.isAlive ? 1 : 0) || x.name.localeCompare(y.name, 'lt'));
+    $('death-list').innerHTML = mine.map(p => `
+        <button class="killer-btn ${p.isAlive ? '' : 'dead'}" data-id="${esc(p.id)}" onclick="pickDeath(this.dataset.id)">
+            ${avatar(p, 34)}<span class="kb-txt"><span class="kb-nm">${esc(p.name)}</span>${p.realName ? `<small>${esc(p.realName)}</small>` : ''}</span>
+        </button>`).join('') || '<p class="muted">Komandoje nėra žaidėjų.</p>';
+    $('death-modal').classList.remove('hidden');
+}
+function closeDeathModal() { $('death-modal').classList.add('hidden'); }
+function pickDeath(id) {
+    const p = players.find(x => x.id === id && x.team === myRole);
+    closeDeathModal();
+    if (!p) return;
+    askConfirm({
+        title: `${p.name} – nukautas?`,
+        text: 'Bus įrašyta, kad šiuo metu buvote nukautas. Savo NFC žymę atiduokite nukovusiems.',
+        okLabel: 'Taip, mane nukovė',
+        onOk: () => R('log').push({
+            type: 'death', playerId: p.id, playerName: p.name, team: p.team,
+            t: firebase.database.ServerValue.TIMESTAMP
+        }).then(() => toast('Įrašyta. Ačiū!')).catch(dbError)
+    });
+}
+// GM patikra kiekvienam nukovimui: ar auka pranešė ir kada (palyginti su kontrakto pradžia).
+function deathCheck(l) {
+    const reports = logs.filter(x => x.type === 'death' && x.playerId === l.targetId && x.t);
+    if (!reports.length) return { cls: 'warn', txt: 'auka nepranešė' };
+    const start = typeof l.age === 'number' && l.t ? l.t - l.age : null;
+    if (start !== null && reports.every(r => r.t < start - 5000))
+        return { cls: 'bad', txt: 'pranešė prieš tapdamas taikiniu' };
+    return { cls: 'ok', txt: 'auka pranešė' };
 }
 
 /* ==========================================================================
@@ -1867,7 +1907,7 @@ function renderHunter() {
             <div class="lbl">${lbl}</div>
             ${rows}
             <button id="killBtn" class="action-btn" onclick="killScan()">${KILL_IDLE_TEXT}</button>
-            <p class="mode-hint"><b>${KILL_MODES[killMode()].title}.</b> ${KILL_MODES[killMode()].hint}</p>`;
+            <p class="mode-hint">${KILL_HINT}</p>`;
     } else if (!players.length) {
         body = `<p class="muted" style="margin:0;">Kraunama...</p>`;
     } else if (aliveEnemies(myRole).length) {
@@ -1875,7 +1915,8 @@ function renderHunter() {
     } else {
         body = `<h1 style="color:var(--green); margin:0;">Misija įvykdyta</h1>`;
     }
-    el.innerHTML = teamLine + finalBanner + `<div class="target-frame">${body}</div><div id="help-area"></div>`;
+    const deathBtn = isRunning() ? `<button class="action-btn ghost" style="margin-top:12px;" onclick="openDeathModal()">Mane nukovė</button>` : '';
+    el.innerHTML = teamLine + finalBanner + `<div class="target-frame">${body}</div>${deathBtn}<div id="help-area"></div>`;
     updateKillBtn();
     renderHelpTeam();
 }
@@ -1885,14 +1926,8 @@ function renderGM() {
     $('btnStartTimer').classList.toggle('hidden', started);
     $('btnEndGame').classList.toggle('hidden', !started);
 
-    const km = killMode();
-    const fb = isFinalPhase() ? `<div class="final-banner" style="margin-top:12px;"><b>Medžioklės valanda</b> visi taškai ×${FINAL_MULT}</div>` : '';
-    $('gm-mode').innerHTML = fb + (started
-        ? `<div class="mode-card"><span class="lbl">Nukovimo režimas</span><div style="font-weight:700; margin-top:2px;">${KILL_MODES[km].title}</div><div class="muted small">${KILL_MODES[km].short}</div></div>`
-        : `<div class="mode-card"><span class="lbl">Nukovimo režimas (keičiamas iki laiko pradžios)</span>
-            <div class="seg">${Object.keys(KILL_MODES).map(k => `
-                <button class="${k === km ? 'on' : ''}" onclick="setKillMode('${k}')">${KILL_MODES[k].title}<small>${KILL_MODES[k].short}</small></button>`).join('')}
-            </div></div>`);
+    $('gm-mode').innerHTML = isFinalPhase()
+        ? `<div class="final-banner" style="margin-top:12px;"><b>Medžioklės valanda</b> visi taškai ×${FINAL_MULT}</div>` : '';
     renderGMTargets();
 
     // Gyvi viršuje, nukauti apačioje; paieška pagal slapyvardį ar vardą.
