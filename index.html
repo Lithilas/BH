@@ -151,6 +151,12 @@
         .mode-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; margin-top: 12px; }
         @media (max-width: 380px) { .two-targets .target-name { font-size: 2.3rem; } }
         #gm-targets .stat b { font-size: 1.6rem; white-space: normal; }
+        .real { display: block; font: 500 0.82rem/1.25 'Barlow', sans-serif; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .target-real { font-size: 1.05rem; color: var(--muted); margin: -4px 0 6px; }
+        .import-box { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; margin: 14px 0; }
+        .import-box textarea { width: 100%; min-height: 90px; box-sizing: border-box; border: 1px solid var(--line-strong); border-radius: 10px; padding: 10px; font: 400 0.95rem 'Barlow', sans-serif; resize: vertical; }
+        .import-row { display: flex; gap: 8px; margin-top: 8px; }
+        .import-row .action-btn { margin: 0; }
         .tgt-meta { display: block; font: 500 0.78rem 'Barlow', sans-serif; color: var(--muted); margin: -2px 0 6px; }
         .board-row .kc { color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
     </style>
@@ -191,8 +197,17 @@
     <!-- GM: add players -->
     <div id="screen-enlist" class="screen hidden">
         <h2>Pridėti žaidėjus</h2>
-        <input type="text" id="nameInput" placeholder="Žaidėjo slapyvardis" maxlength="20" autocomplete="off">
-        <button class="action-btn" style="margin-top:0;" onclick="addPlayerEnlist()">Pridėti žaidėją</button>
+        <input type="text" id="nameInput" placeholder="Slapyvardis (rodomas didžiai)" maxlength="24" autocomplete="off">
+        <input type="text" id="realInput" placeholder="Vardas (nebūtina, rodomas mažai)" maxlength="40" autocomplete="off">
+        <button class="action-btn ghost" style="margin-top:0;" onclick="addPlayerEnlist()">Pridėti žaidėją</button>
+        <details class="import-box">
+            <summary style="cursor:pointer; font-weight:600;">Įkelti registracijų sąrašą</summary>
+            <p class="muted small" style="margin:8px 0;">Įkelkite sratas.lt registracijų failą (.xlsx arba .csv) – bus paimti tik stulpeliai „Username“ ir „Name“. Arba įklijuokite eilutes: <i>slapyvardis</i> ir <i>vardas</i>, atskirti tabuliacija, kabliataškiu arba kableliu.</p>
+            <input type="file" id="importFile" accept=".xlsx,.xls,.csv" class="hidden" onchange="importFromFile(this)">
+            <button class="action-btn ghost" style="margin:0 0 10px;" onclick="$('importFile').click()">Pasirinkti failą (.xlsx / .csv)</button>
+            <textarea id="importText" placeholder="Deimoze; Deimantas&#10;LiutC; Liutauras"></textarea>
+            <div class="import-row"><button class="action-btn ghost" onclick="importFromText()">Pridėti iš teksto</button></div>
+        </details>
         <div id="playerList"></div>
         <button class="action-btn" onclick="navToAssign()">Priskirti komandai</button>
     </div>
@@ -290,7 +305,8 @@
 <div id="add-player-modal" class="modal hidden">
     <div class="modal-box">
         <h3>Pridėti naują žaidėją</h3>
-        <input type="text" id="newPlayerName" placeholder="Žaidėjo slapyvardis" maxlength="20" autocomplete="off">
+        <input type="text" id="newPlayerName" placeholder="Slapyvardis" maxlength="24" autocomplete="off">
+        <input type="text" id="newPlayerReal" placeholder="Vardas (nebūtina)" maxlength="40" autocomplete="off">
         <div style="display:flex; gap:8px; margin-bottom: 16px;">
             <button id="btnTeamRed" class="team-btn t-red" onclick="selectNewPlayerTeam('RAUDONA')">Raudona</button>
             <button id="btnTeamBlue" class="team-btn t-blue" onclick="selectNewPlayerTeam('MELYNA')">Mėlyna</button>
@@ -391,6 +407,8 @@ const phase = () => status.phase || 'enlist';
 const teamColor = t => t === 'RAUDONA' ? 'var(--red)' : t === 'MELYNA' ? 'var(--blue)' : 'var(--line-strong)';
 const teamLabel = t => t === 'RAUDONA' ? 'Raudona' : t === 'MELYNA' ? 'Mėlyna' : '—';
 const nameSpan = (n, t) => `<b style="color:${teamColor(t)}">${esc(n)}</b>`;
+// Tikras vardas po slapyvardžiu (mažesniu šriftu), kad žaidėjai geriau pažintų vieni kitus.
+const realSmall = p => p && p.realName ? `<small class="real">${esc(p.realName)}</small>` : '';
 const isGM = () => myRole === 'GM' && gmOk === true;
 const dbError = err => { console.error(err); toast('Nepavyko pasiekti duomenų bazės (patikrinkite ryšį ir Firebase taisykles).', true, 6000); };
 
@@ -766,19 +784,170 @@ function validName(name) {
 function addPlayerEnlist() {
     if (!isGM()) return;
     const name = $('nameInput').value.trim();
+    const realName = $('realInput').value.trim();
     if (!validName(name)) return;
-    R('players').push({
-        name: name, team: '', isAlive: true, kills: 0, joined: now()
-    }).catch(dbError);
+    const pl = { name: name, team: '', isAlive: true, kills: 0, joined: now() };
+    if (realName) pl.realName = realName;
+    R('players').push(pl).catch(dbError);
     $('nameInput').value = '';
+    $('realInput').value = '';
     $('nameInput').focus();
+}
+$('realInput').addEventListener('keydown', e => { if (e.key === 'Enter') addPlayerEnlist(); });
+
+/* ---------- Sąrašo importas (sratas.lt .xlsx/.csv arba įklijuotas tekstas) ---------- */
+// Imami TIK slapyvardis ir vardas – telefonai ir kiti stulpeliai ignoruojami ir niekur nesaugomi.
+const clean = v => String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+function rowsToPeople(rows) {
+    if (!rows.length) return [];
+    const head = rows[0].map(h => clean(h).toLowerCase());
+    const find = names => head.findIndex(h => names.includes(h));
+    let iNick = find(['username', 'slapyvardis', 'nick', 'nickname']);
+    let iReal = find(['name', 'vardas']);
+    const iConf = find(['confirmed', 'patvirtinta', 'patvirtintas']);
+    let body = rows;
+    if (iNick >= 0) body = rows.slice(1);
+    else { iNick = 0; iReal = rows[0].length > 1 ? 1 : -1; }   // be antraščių: 1 stulpelis – slapyvardis, 2 – vardas
+    return body.map(r => ({
+        name: clean(r[iNick]).slice(0, 24),
+        realName: iReal >= 0 ? clean(r[iReal]).slice(0, 40) : '',
+        skip: iConf >= 0 && /^(no|ne)$/i.test(clean(r[iConf]))
+    })).filter(x => x.name);
+}
+function textToRows(text) {
+    return text.split(/\r?\n/).map(l => l.trim()).filter(Boolean).map(l => {
+        const sep = l.includes('\t') ? '\t' : l.includes(';') ? ';' : ',';
+        return l.split(sep).map(c => c.trim().replace(/^"|"$/g, ''));
+    });
+}
+// Mažas .xlsx skaitytuvas be išorinių bibliotekų: .xlsx yra ZIP su XML failais.
+async function unzipEntries(buf) {
+    const dv = new DataView(buf), u8 = new Uint8Array(buf);
+    let eocd = -1;
+    for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 66000); i--) {
+        if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd < 0) throw new Error('not a zip');
+    const count = dv.getUint16(eocd + 10, true);
+    let off = dv.getUint32(eocd + 16, true);
+    const dec = new TextDecoder();
+    const files = {};
+    for (let n = 0; n < count; n++) {
+        if (dv.getUint32(off, true) !== 0x02014b50) break;
+        const method = dv.getUint16(off + 10, true);
+        const csize = dv.getUint32(off + 20, true);
+        const nlen = dv.getUint16(off + 28, true), xlen = dv.getUint16(off + 30, true), clen = dv.getUint16(off + 32, true);
+        const loc = dv.getUint32(off + 42, true);
+        const name = dec.decode(u8.subarray(off + 46, off + 46 + nlen));
+        files[name] = { method, csize, loc };
+        off += 46 + nlen + xlen + clen;
+    }
+    const read = async name => {
+        const f = files[name];
+        if (!f) return null;
+        const start = f.loc + 30 + dv.getUint16(f.loc + 26, true) + dv.getUint16(f.loc + 28, true);
+        const data = u8.subarray(start, start + f.csize);
+        if (f.method === 0) return dec.decode(data);
+        if (f.method !== 8) throw new Error('zip method');
+        const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+        return await new Response(stream).text();
+    };
+    return { names: Object.keys(files), read };
+}
+async function readXlsxRows(buf) {
+    const z = await unzipEntries(buf);
+    const xml = t => new DOMParser().parseFromString(t, 'application/xml');
+    const textOf = el => Array.from(el.getElementsByTagName('t')).map(t => t.textContent).join('');
+    const shared = [];
+    const ss = await z.read('xl/sharedStrings.xml');
+    if (ss) Array.from(xml(ss).getElementsByTagName('si')).forEach(si => shared.push(textOf(si)));
+    const sheetName = z.names.filter(n => /^xl\/worksheets\/sheet\d+\.xml$/.test(n))
+        .sort((a, b) => parseInt(a.match(/\d+/)[0]) - parseInt(b.match(/\d+/)[0]))[0];
+    if (!sheetName) throw new Error('no sheet');
+    const doc = xml(await z.read(sheetName));
+    const colIdx = ref => { let c = 0; for (const ch of ref.replace(/\d+/g, '')) c = c * 26 + (ch.charCodeAt(0) - 64); return c - 1; };
+    return Array.from(doc.getElementsByTagName('row')).map(row => {
+        const out = [];
+        Array.from(row.getElementsByTagName('c')).forEach((c, i) => {
+            const t = c.getAttribute('t'), r = c.getAttribute('r');
+            const v = c.getElementsByTagName('v')[0];
+            let val = '';
+            if (t === 's') val = v ? (shared[parseInt(v.textContent, 10)] || '') : '';
+            else if (t === 'inlineStr') val = textOf(c);
+            else val = v ? v.textContent : '';
+            out[r ? colIdx(r) : i] = val;
+        });
+        for (let i = 0; i < out.length; i++) if (out[i] === undefined) out[i] = '';
+        return out;
+    });
+}
+async function importFromFile(input) {
+    const f = input.files && input.files[0];
+    input.value = '';
+    if (!f || !isGM()) return;
+    try {
+        let rows;
+        if (/\.csv$/i.test(f.name)) {
+            rows = textToRows(await f.text());
+        } else {
+            rows = await readXlsxRows(await f.arrayBuffer());
+        }
+        importPeople(rowsToPeople(rows));
+    } catch (e) {
+        console.error(e);
+        toast('Nepavyko perskaityti failo. Pabandykite įklijuoti sąrašą tekstu.', true, 5000);
+    }
+}
+function importFromText() {
+    if (!isGM()) return;
+    const t = $('importText').value;
+    if (!t.trim()) return toast('Įklijuokite sąrašą.', true);
+    importPeople(rowsToPeople(textToRows(t)));
+}
+function importPeople(list) {
+    const taken = new Set(players.map(p => p.name.toLowerCase()));
+    const add = [], dup = [];
+    let skipped = 0;
+    list.forEach(x => {
+        if (x.skip) { skipped++; return; }
+        const k = x.name.toLowerCase();
+        if (taken.has(k)) { dup.push(x.name); return; }
+        taken.add(k);
+        add.push(x);
+    });
+    if (!add.length) {
+        return toast(dup.length ? 'Visi šie žaidėjai jau sąraše.' : 'Sąraše nerasta žaidėjų.', true, 4000);
+    }
+    const notes = [];
+    if (dup.length) notes.push(`${dup.length} jau yra sąraše – praleisti`);
+    if (skipped) notes.push(`${skipped} nepatvirtinti – praleisti`);
+    askConfirm({
+        title: `Pridėti ${add.length} žaid.?`,
+        text: add.slice(0, 8).map(x => x.name + (x.realName ? ' (' + x.realName + ')' : '')).join(', ')
+            + (add.length > 8 ? ` ir dar ${add.length - 8}` : '') + '.' + (notes.length ? ' ' + notes.join('; ') + '.' : ''),
+        okLabel: 'Pridėti',
+        onOk: async () => {
+            const u = {}, t0 = now();
+            add.forEach((x, i) => {
+                const key = R('players').push().key;
+                const pl = { name: x.name, team: '', isAlive: true, kills: 0, joined: t0 + i };
+                if (x.realName && x.realName.toLowerCase() !== x.name.toLowerCase()) pl.realName = x.realName;
+                u[key] = pl;
+            });
+            try {
+                await R('players').update(u);
+                $('importText').value = '';
+                toast(`Pridėta žaidėjų: ${add.length}`);
+            } catch (e) { dbError(e); }
+        }
+    });
 }
 $('nameInput').addEventListener('keydown', e => { if (e.key === 'Enter') addPlayerEnlist(); });
 
 function renderEnlist() {
     $('playerList').innerHTML = players.length ? players.map(p => `
         <div class="player-card">
-            <b>${esc(p.name)}</b>
+            <b>${esc(p.name)}${realSmall(p)}</b>
             <button class="gm-btn gm-danger" style="flex:0 0 auto;" onclick="gmDeletePlayer('${p.id}')">Šalinti</button>
         </div>`).join('')
         : '<p class="muted">Žaidėjų dar nėra. Įrašykite slapyvardį ir spauskite „Pridėti žaidėją“.</p>';
@@ -806,7 +975,7 @@ function renderAssign() {
     $('assignList').innerHTML = players.map(p => `
         <div class="player-card" style="flex-wrap:wrap;">
             <i class="dot" style="background:${teamColor(p.team)}; margin-right:0;"></i>
-            <b>${esc(p.name)}</b>
+            <b>${esc(p.name)}${realSmall(p)}</b>
             <div style="display:flex; gap:6px; align-items:center; width:100%;">
                 <button class="team-btn ${p.team === 'RAUDONA' ? 'active' : ''} t-red" onclick="setTeam('${p.id}','RAUDONA')">Raudona</button>
                 <button class="team-btn ${p.team === 'MELYNA' ? 'active' : ''} t-blue" onclick="setTeam('${p.id}','MELYNA')">Mėlyna</button>
@@ -835,7 +1004,7 @@ function renderNFC() {
     const list = players.map(p => `
         <div class="nfc-row ${p.nfcId ? 'done' : ''}">
             <i class="dot ${p.nfcId ? 'ok' : ''}"></i>
-            <b style="color:${teamColor(p.team)}">${esc(p.name)}</b>&nbsp;<span class="muted">${p.nfcId ? '· susietas' : '· laukia'}</span>
+            <b style="color:${teamColor(p.team)}">${esc(p.name)}</b>&nbsp;<span class="muted">${p.realName ? esc(p.realName) + ' ' : ''}${p.nfcId ? '· susietas' : '· laukia'}</span>
         </div>`).join('');
 
     if (myRole !== 'GM') {
@@ -857,6 +1026,7 @@ function renderNFC() {
         container.innerHTML = `
             <div class="lbl">NFC kodo priskyrimas</div>
             <h1 class="target-name">${esc(pending.name)}</h1>
+            ${pending.realName ? `<div class="target-real">${esc(pending.realName)}</div>` : ''}
             <div class="target-team"><i class="dot" style="background:${teamColor(pending.team)}"></i>${teamLabel(pending.team)} komanda</div>
             <p class="muted">Priglauskite šio žaidėjo NFC žymę ir spauskite mygtuką.</p>
             <button id="btnScanSetup" class="action-btn" onclick="linkPlayerNFC('${pending.id}')">Nuskaityti žymę</button>
@@ -1035,6 +1205,7 @@ function gmEndGame() {
 function openAddPlayerModal() {
     if (!isGM()) return;
     $('newPlayerName').value = '';
+    $('newPlayerReal').value = '';
     newPlayerSelectedTeam = '';
     $('btnTeamRed').classList.remove('active');
     $('btnTeamBlue').classList.remove('active');
@@ -1053,7 +1224,7 @@ function confirmAddPlayer() {
     if (!newPlayerSelectedTeam) return toast('Prašome pasirinkti komandą!', true);
     R('players').push({
         name: name, team: newPlayerSelectedTeam, isAlive: true, kills: 0,
-        joined: now()
+        joined: now(), ...(($('newPlayerReal') && $('newPlayerReal').value.trim()) ? { realName: $('newPlayerReal').value.trim() } : {})
     }).then(() => toast('Žaidėjas pridėtas! Susiekite jo NFC žymę kortelėje.'))
       .catch(dbError);
     closeAddPlayerModal();
@@ -1112,7 +1283,7 @@ function killScan() {
             value: lateHit ? 1 : contractValue(target.at),
             huntedIds: getTeamTargets(otherTeam(myRole)).map(x => x.id)
         };
-        $('killer-target').innerText = target.name;
+        $('killer-target').innerHTML = esc(target.name) + (target.realName ? ` <span class="muted" style="font: 500 1rem 'Barlow', sans-serif;">${esc(target.realName)}</span>` : '');
         renderKillerList();
         $('killer-modal').classList.remove('hidden');
     });
@@ -1129,7 +1300,7 @@ function renderKillerList() {
         .sort((x, y) => (y.isAlive ? 1 : 0) - (x.isAlive ? 1 : 0) || x.name.localeCompare(y.name, 'lt'));
     $('killer-list').innerHTML = mine.length ? mine.map(p => `
         <button class="killer-btn ${p.isAlive ? '' : 'dead'}" data-id="${esc(p.id)}" onclick="pickKiller(this.dataset.id)">
-            ${esc(p.name)}${p.isAlive ? '' : '<small>nukautas</small>'}
+            ${esc(p.name)}${p.realName ? `<small>${esc(p.realName)}</small>` : ''}${p.isAlive ? '' : '<small>nukautas</small>'}
         </button>`).join('') : '<p class="muted">Komandoje nėra žaidėjų.</p>';
 }
 
@@ -1246,6 +1417,7 @@ function renderHunter() {
         const rows = targets.map((t, i) => `
             <div class="target-row"${i ? ' style="border-top:1px solid var(--line); padding-top:12px; margin-top:4px;"' : ''}>
                 <h1 class="target-name">${esc(t.name)}</h1>
+                ${t.realName ? `<div class="target-real">${esc(t.realName)}</div>` : ''}
                 <div class="target-team"><i class="dot" style="background:${teamColor(t.team)}"></i>${teamLabel(t.team)} komanda</div>
             </div>`).join('');
         const lbl = targets.length > 1 ? 'Jūsų komandos taikiniai – nukaukite bet kurį' : 'Jūsų komandos taikinys';
@@ -1285,7 +1457,7 @@ function renderGM() {
         <div class="gm-card ${p.isAlive ? '' : 'dead'}">
             <div class="gm-head">
                 <i class="dot" style="background:${teamColor(p.team)}; margin-right:0;"></i>
-                <span class="nm">${esc(p.name)}</span>
+                <span class="nm">${esc(p.name)}${realSmall(p)}</span>
                 ${hunted ? '<span class="pill">Medžiojamas</span>' : ''}
             </div>
             <div class="gm-meta">
@@ -1310,7 +1482,7 @@ function renderGMTargets() {
     const names = tm => {
         const l = getTeamTargets(tm);
         if (!l.length) return '—';
-        return l.map(x => `${esc(x.name)}${running ? `<span class="tgt-meta">${contractValue(x.at)} tšk. · liko ${fmt(contractLeftSec(x.at))}</span>` : ''}`).join('');
+        return l.map(x => `${esc(x.name)}${running ? `<span class="tgt-meta">${x.realName ? esc(x.realName) + ' · ' : ''}${contractValue(x.at)} tšk. · liko ${fmt(contractLeftSec(x.at))}</span>` : ''}`).join('');
     };
     el.innerHTML = `
         <div class="score-strip" style="margin-top:12px;">
@@ -1378,7 +1550,7 @@ function renderEnd() {
         $('end-board').innerHTML = sorted.map((p, i) => `
             <div class="board-row">
                 <span class="rank">${i + 1}.</span>
-                <span class="nm"><i class="dot" style="background:${teamColor(p.team)}; margin-right:0;"></i><span style="overflow:hidden; text-overflow:ellipsis;">${esc(p.name)}</span>${top > 0 && (p.points || 0) === top ? '<span class="pill ok">Lyderis</span>' : ''}</span>
+                <span class="nm"><i class="dot" style="background:${teamColor(p.team)}; margin-right:0;"></i><span style="overflow:hidden; text-overflow:ellipsis; min-width:0;">${esc(p.name)}${realSmall(p)}</span>${top > 0 && (p.points || 0) === top ? '<span class="pill ok">Lyderis</span>' : ''}</span>
                 <span class="kc">${p.kills || 0} nukov.</span>
                 <b>${p.points || 0}</b>
             </div>`).join('');
