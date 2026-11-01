@@ -215,7 +215,7 @@
         <h2 id="pin-title" style="text-align:center; margin-top:40px;"></h2>
         <p id="pin-text" class="muted" style="text-align:center; margin-bottom:20px;"></p>
         <input type="text" id="pinInput" placeholder="GM kodas" autocomplete="off" autocapitalize="characters" spellcheck="false">
-        <input type="password" id="pinInput2" class="hidden" placeholder="Pakartokite PIN" autocomplete="off">
+        <input type="text" id="pinInput2" class="hidden" placeholder="Pakartokite GM kodą" autocomplete="off" autocapitalize="characters" spellcheck="false">
         <button id="pinBtn" class="action-btn" onclick="submitPin()">Prisijungti</button>
     </div>
 
@@ -846,7 +846,7 @@ setInterval(() => {
     if (fin !== wasFinal) {
         if (fin && wasFinal === false && myRole !== 'GM') feedback('final');
         wasFinal = fin;
-        if (phase() === 'game') renderGame();
+        if (phase() === 'game') render();
     }
 }, 1000);
 let wasFinal = null;
@@ -907,8 +907,6 @@ function renderPin() {
         $('pin-title').innerText = 'Pirmas paleidimas';
         $('pin-text').innerText = 'Sugalvokite GM kodą (6–12 raidžių ar skaičių). Jį naudosite kiekvieną kartą prisijungdami kaip GM.';
         $('pinInput2').classList.remove('hidden');
-        $('pinInput2').type = 'text';
-        $('pinInput2').placeholder = 'Pakartokite GM kodą';
         $('pinBtn').innerText = 'Sukurti žaidimą';
         $('pinBtn').disabled = false;
         return;
@@ -925,8 +923,9 @@ async function setupGame(key) {
     if (key.length < 6 || key.length > 12) return toast('GM kodas turi būti 6–12 raidžių ar skaičių.', true);
     if (normKey($('pinInput2').value) !== key) return toast('Kodai nesutampa.', true);
     try {
-        await R('private/gmKey').set(key);     // pavyksta tik jei žaidimas dar nesukurtas
-        await R('gms/' + myUid).set(key);
+        try { await R('private/gmKey').set(key); }   // pavyksta tik jei žaidimas dar nesukurtas
+        catch (e) { /* GM kodas jau yra (nebaigtas kūrimas) – žemiau tikrinama, ar jis tas pats */ }
+        await R('gms/' + myUid).set(key);              // taisyklės priims tik teisingą kodą
         await R('meta').set({ name: ROOM_NAME, createdAt: firebase.database.ServerValue.TIMESTAMP, keep: true });
         $('pinInput').value = ''; $('pinInput2').value = '';
         toast('Žaidimas sukurtas. Išsaugokite GM kodą!');
@@ -1447,7 +1446,7 @@ function newRoundWipe() {
                 u[b + 'diedAt'] = null;
             });
             u['log'] = null;
-            u['gameStatus'] = { phase: 'nfc' };
+            u['gameStatus'] = { phase: 'nfc', killMode: killMode() };
             try { await R().update(u); } catch (e) { dbError(e); }
         }
     });
@@ -2093,7 +2092,8 @@ function attachListeners() {
         render();
     }, dbError);
 
-    R('log').limitToLast(100).on('value', snap => {
+    R('log').limitToLast(500)   // visas raundas (apdovanojimams reikia ir pirmųjų įrašų)
+       .on('value', snap => {
         const arr = [];
         snap.forEach(c => { const v = c.val(); if (v) arr.push(Object.assign({}, v, { id: c.key })); });
         logs = arr;

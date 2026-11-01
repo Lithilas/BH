@@ -222,7 +222,6 @@
         <h2 id="pin-title" style="text-align:center; margin-top:40px;"></h2>
         <p id="pin-text" class="muted" style="text-align:center; margin-bottom:20px;"></p>
         <input type="text" id="pinInput" placeholder="GM kodas" autocomplete="off" autocapitalize="characters" spellcheck="false">
-        <input type="password" id="pinInput2" class="hidden" placeholder="Pakartokite PIN" autocomplete="off">
         <button id="pinBtn" class="action-btn" onclick="submitPin()">Prisijungti</button>
     </div>
 
@@ -859,7 +858,7 @@ setInterval(() => {
     if (fin !== wasFinal) {
         if (fin && wasFinal === false && myRole !== 'GM') feedback('final');
         wasFinal = fin;
-        if (phase() === 'game') renderGame();
+        if (phase() === 'game') render();
     }
 }, 1000);
 let wasFinal = null;
@@ -917,7 +916,6 @@ function renderPin() {
     const loading = gmOk === undefined;
     $('pin-title').innerText = 'GM prieiga';
     $('pin-text').innerText = loading ? 'Kraunama...' : 'Įveskite GM kodą, kurį gavote kurdami žaidimą.';
-    $('pinInput2').classList.add('hidden');
     $('pinBtn').innerText = 'Prisijungti';
     $('pinBtn').disabled = loading;
 }
@@ -1434,7 +1432,7 @@ function newRoundWipe() {
                 u[b + 'diedAt'] = null;
             });
             u['log'] = null;
-            u['gameStatus'] = { phase: 'nfc' };
+            u['gameStatus'] = { phase: 'nfc', killMode: killMode() };
             try { await R().update(u); } catch (e) { dbError(e); }
         }
     });
@@ -2106,7 +2104,8 @@ function attachListeners() {
         render();
     }, dbError);
 
-    R('log').limitToLast(100).on('value', snap => {
+    R('log').limitToLast(500)   // visas raundas (apdovanojimams reikia ir pirmųjų įrašų)
+       .on('value', snap => {
         const arr = [];
         snap.forEach(c => { const v = c.val(); if (v) arr.push(Object.assign({}, v, { id: c.key })); });
         logs = arr;
