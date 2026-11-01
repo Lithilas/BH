@@ -86,7 +86,7 @@
         <button id="create" class="btn btn-primary" onclick="createRoom()">Sukurti žaidimą</button>
     </div>
 
-    <div class="card" id="rooms-card">
+    <div class="card">
         <h3>Atviri kambariai</h3>
         <div id="rooms" class="room-meta">Kraunama...</div>
     </div>
@@ -147,13 +147,15 @@
             const snap = await db.ref('roomList').once('value');
             const list = [];
             snap.forEach(c => { const v = c.val() || {}; list.push({ code: c.key, name: v.name || '', createdAt: v.createdAt || 0 }); });
-            list.sort((a, b) => b.createdAt - a.createdAt);
             if (!list.length) { box.innerHTML = 'Atvirų kambarių nėra.'; return; }
             await Promise.all(list.map(async r => {
                 try {
-                    const gs = (await db.ref('rooms/' + r.code + '/gameStatus').once('value')).val() || {};
-                    const ttl = (await db.ref('rooms/' + r.code + '/meta/keep').once('value')).val();
-                    r.keep = !!ttl;
+                    const [gsSnap, keepSnap] = await Promise.all([
+                        db.ref('rooms/' + r.code + '/gameStatus').once('value'),
+                        db.ref('rooms/' + r.code + '/meta/keep').once('value')
+                    ]);
+                    const gs = gsSnap.val() || {};
+                    r.keep = !!keepSnap.val();
                     const ph = gs.phase || 'enlist';
                     r.live = ph === 'game' && !!gs.startTime;
                     r.status = ph === 'game' ? (gs.startTime ? 'Vyksta' : 'Paruoštas startui') : (STATUS[ph] || ph);

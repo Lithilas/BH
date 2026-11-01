@@ -458,6 +458,9 @@ let confirmState = null;
 
 /* ---------- Pagalbinės funkcijos ---------- */
 const $ = id => document.getElementById(id);
+// Perrašo turinį tik pasikeitus HTML: kas sekundę atnaujinamos dalys nebeperpiešiamos be reikalo,
+// o mygtukai nepakeičiami po pirštu (kitaip paspaudimas gali „pasimesti“).
+function setHTML(el, html) { if (el && el._html !== html) { el.innerHTML = html; el._html = html; } }
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const now = () => Date.now() + serverOffset;
@@ -846,7 +849,7 @@ setInterval(() => {
     autoEndCheck();
     if (isRunning()) {
         ensureTargets();
-        if (myRole === 'GM' && isGM() && phase() === 'game') renderGMTargetsAndHelp();
+        if (myRole === 'GM' && isGM() && phase() === 'game') { renderGMTargets(); renderHelpGM(); }
         else if (myRole !== 'GM' && phase() === 'game') renderHelpTeam();
     }
     // Prasidėjus „Medžioklės valandai“ – signalas ir ekrano atnaujinimas (vieną kartą).
@@ -1636,7 +1639,6 @@ function logMiss() {
 // Atominis nukovimas: transakcija užtikrina, kad taikinys miršta tik kartą
 // ir tašką gauna tik tas medžiotojas, kuriam transakcija pavyko.
 async function confirmKill(hunter, target, pts, triple, final, age) {
-    pts = pts || 1;
     try {
         const res = await R('players/' + target.id).transaction(p => {
             if (p === null) return p;          // dar neužkrauta / ištrintas
@@ -1754,22 +1756,22 @@ let ackSeen = null;
 function renderHelpTeam() {
     const box = $('help-area');
     if (!box) return;
-    if (!isRunning()) { box.innerHTML = ''; return; }
+    if (!isRunning()) { setHTML(box, ''); return; }
     const st = helpState(myRole);
     if (st && st.ack && now() - st.ack.t < HELP_ACK_SHOW_MIN * 60000) {
         if (ackSeen !== st.ack.id) { if (ackSeen !== null) { feedback('scan'); toast('GM atvyksta!'); } ackSeen = st.ack.id; }
-        box.innerHTML = `<div class="help-state ok"><i class="dot ok"></i>GM atvyksta</div>`;
+        setHTML(box, `<div class="help-state ok"><i class="dot ok"></i>GM atvyksta</div>`);
         return;
     }
     if (ackSeen === null) ackSeen = st && st.ack ? st.ack.id : '';
     if (st && st.open) {
         const left = Math.max(0, HELP_COOLDOWN_SEC - Math.floor(st.age / 1000));
-        box.innerHTML = `<div class="help-state"><i class="dot"></i>GM iškviestas – laukiama atsakymo
+        setHTML(box, `<div class="help-state"><i class="dot"></i>GM iškviestas – laukiama atsakymo
             <span class="muted">${left ? '· dar kartą po ' + fmt(left) : ''}</span></div>
-            ${left ? '' : `<button class="action-btn ghost help-btn" onclick="callHelp()">Kviesti GM dar kartą</button>`}`;
+            ${left ? '' : `<button class="action-btn ghost help-btn" onclick="callHelp()">Kviesti GM dar kartą</button>`}`);
         return;
     }
-    box.innerHTML = `<button class="action-btn ghost help-btn" onclick="callHelp()">Kviesti GM pagalbą</button>`;
+    setHTML(box, `<button class="action-btn ghost help-btn" onclick="callHelp()">Kviesti GM pagalbą</button>`);
 }
 // GM telefone: ryškus pranešimas su „Vykstu“, kol neatsakyta; garsas kas 30 s.
 const helpAlerted = {};
@@ -1777,16 +1779,17 @@ let lastHelpBuzz = 0;
 function renderHelpGM() {
     const box = $('gm-help');
     if (!box) return;
-    if (!isGM() || phase() !== 'game') { box.innerHTML = ''; return; }
+    if (!isGM() || phase() !== 'game') { setHTML(box, ''); return; }
     const open = ['RAUDONA', 'MELYNA'].map(tm => Object.assign({ team: tm }, helpState(tm) || {})).filter(x => x.open);
-    box.innerHTML = open.map(h => `
+    setHTML(box, open.map(h => `
         <div class="gm-help">
             <div class="gh-txt">
                 <div class="gh-title"><i class="dot" style="background:${teamColor(h.team)}"></i>${teamLabel(h.team)} komanda kviečia pagalbos</div>
-                <div class="gh-sub">prieš ${fmt(Math.max(0, Math.floor(h.age / 1000)))}</div>
+                <div class="gh-sub">prieš <span class="gh-age" data-t="${h.t}"></span></div>
             </div>
             <button onclick="ackHelp('${h.team}','${esc(h.id)}')">Vykstu</button>
-        </div>`).join('');
+        </div>`).join(''));
+    box.querySelectorAll('.gh-age').forEach(e => { e.textContent = fmt(Math.max(0, Math.floor((now() - Number(e.dataset.t)) / 1000))); });
     let fresh = false;
     open.forEach(h => { if (!helpAlerted[h.id]) { helpAlerted[h.id] = true; fresh = true; } });
     if (fresh || (open.length && Date.now() - lastHelpBuzz > 30000)) { lastHelpBuzz = Date.now(); feedback('final'); }
@@ -1898,8 +1901,9 @@ function renderGM() {
     const shown = players.filter(match).sort((a, b) => (b.isAlive ? 1 : 0) - (a.isAlive ? 1 : 0));
     const alive = players.filter(p => p.isAlive).length;
     $('gm-list-sum').innerText = `Gyvi ${alive} · nukauti ${players.length - alive}` + (q ? ` · rasta ${shown.length}` : '');
+    const huntedIds = new Set(getTeamTargets('RAUDONA').concat(getTeamTargets('MELYNA')).map(x => x.id));
     $('gm-player-list').innerHTML = (shown.length ? '' : '<p class="muted">Nieko nerasta.</p>') + shown.map(p => {
-        const hunted = ['RAUDONA', 'MELYNA'].some(tm => { return getTeamTargets(tm).some(x => x.id === p.id); });
+        const hunted = huntedIds.has(p.id);
         return `
         <div class="gm-card ${p.isAlive ? '' : 'dead'}">
             <div class="gm-head">
@@ -1924,7 +1928,6 @@ function renderGM() {
     }).join('');
 }
 
-function renderGMTargetsAndHelp() { renderGMTargets(); renderHelpGM(); }
 function renderGMTargets() {
     const el = $('gm-targets');
     if (!el) return;
@@ -1934,11 +1937,11 @@ function renderGMTargets() {
         if (!l.length) return '—';
         return l.map(x => `${esc(x.name)}${running ? `<span class="tgt-meta">${x.realName ? esc(x.realName) + ' · ' : ''}${contractValue(x.at)} tšk. · liko ${fmt(contractLeftSec(x.at))}</span>` : ''}`).join('');
     };
-    el.innerHTML = `
+    setHTML(el, `
         <div class="score-strip" style="margin-top:12px;">
             <div class="stat"><span class="lbl">Raudonų taikiniai</span><b style="color:var(--red)">${names('RAUDONA')}</b></div>
             <div class="stat"><span class="lbl">Mėlynų taikiniai</span><b style="color:var(--blue)">${names('MELYNA')}</b></div>
-        </div>`;
+        </div>`);
 }
 
 function renderGame() {
