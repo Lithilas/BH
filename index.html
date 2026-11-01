@@ -210,13 +210,6 @@
         <a href="?role=GM" style="text-decoration:none"><button class="action-btn ghost">Žaidimo vedėjas (GM)</button></a>
     </div>
 
-    <!-- Kambarys nerastas -->
-    <div id="screen-noroom" class="screen hidden">
-        <h2 id="noroom-title" style="text-align:center; margin-top:90px;"></h2>
-        <p id="noroom-text" class="muted" style="text-align:center;"></p>
-        <p class="muted small" style="text-align:center; margin-top:18px;"><a href="create-game.html">Sukurti naują žaidimą</a></p>
-    </div>
-
     <!-- GM kodas -->
     <div id="screen-pin" class="screen hidden">
         <h2 id="pin-title" style="text-align:center; margin-top:40px;"></h2>
@@ -379,11 +372,11 @@
    gameStatus: { phase: 'enlist'|'nfc'|'game'|'ended', startTime, duration, endTime, endReason, killMode: 'bring'|'tag' }
    players/{id}: { name (slapyvardis), realName?, photo? (100×100 JPEG data URL), team, nfcId,
                    isAlive, kills, points, joined, killedBy, diedAt }
-   log/{pushId}: { type:'kill'|'miss', hunterId?, hunterName?, hunterTeam, targetId?, targetName?, targetTeam?, t }
-   Visi duomenys laikomi kambaryje: rooms/{KODAS}/…  (kodas – iš nuorodos ?room=KODAS)
-   rooms/{KODAS}/meta: { name, createdAt }
-   rooms/{KODAS}/private/gmKey: GM kodas (klientai jo NIEKADA neskaito; tik taisyklės jį tikrina)
-   rooms/{KODAS}/gms/{uid}: GM kodas, kurį įvedė šis telefonas (taisyklės leidžia įrašyti tik teisingą)
+   log/{pushId}: { type:'kill'|'miss'|'help'|'help-ack', hunterId?, hunterName?, hunterTeam, targetId?, targetName?, targetTeam?, t }
+   Visi duomenys laikomi rooms/LITHILAS/… (vienas nuolatinis žaidimas; kambarių versija – rooms.html)
+   meta: { name, createdAt, keep }
+   private/gmKey: GM kodas (klientai jo NIEKADA neskaito; tik taisyklės jį tikrina)
+   gms/{uid}: GM kodas, kurį įvedė šis telefonas (taisyklės leidžia įrašyti tik teisingą)
    gameStatus/targets: { RAUDONA: { a: <priešo id>, b: <priešo id>, aAt, bAt }, MELYNA: { … } }
      aAt/bAt – kada taikinys paskirtas (serverio laikas); kontraktas galioja CONTRACT_MIN min.
    players/{id}/points – slapti taškai (rodomi tik GM; visiems – kai GM paskelbia rezultatus)
@@ -418,8 +411,6 @@ const killMode = () => (status.killMode === 'tag' ? 'tag' : 'bring');
 // Taškai: taikinys paskiriamas CONTRACT_MIN minučių. Pirmas FULL_MIN min. vertė MAX_POINTS,
 // vėliau kas minutę mažėja 1 tašku (bent 1). Pasibaigus kontraktui taikinys pakeičiamas.
 // Jei žudikas tuo metu pats yra priešų taikinys – taškai dauginami iš HUNTED_MULT.
-// Nenuolatiniai kambariai ištrinami, jei nenaudojami ROOM_TTL_DAYS dienų (žr. roomIndex taisyklėse).
-const ROOM_TTL_DAYS = 5;
 const CONTRACT_MIN = 15, FULL_MIN = 5, MAX_POINTS = 10, HUNTED_MULT = 3;
 // Pasibaigus kontraktui, seno taikinio žymę dar LATE_MIN min. galima nuskenuoti (vertė 1 tšk.),
 // kad nebūtų baudžiama, jei jis buvo nukautas, bet žymė dar nešama į bazę.
@@ -434,10 +425,13 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
 /* ---------- Žaidimo kambarys ---------- */
-const ROOM = (new URLSearchParams(window.location.search).get('room') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-const roomRoot = ROOM ? db.ref('rooms/' + ROOM) : null;
+// Vienas nuolatinis žaidimas. Duomenys laikomi rooms/LITHILAS (kaip ir kambarių versijoje),
+// todėl Firebase taisyklės tos pačios. Kambarių versija – rooms.html.
+const ROOM = 'LITHILAS';
+const ROOM_NAME = 'Lithilas Bounty Hunter';
+const roomRoot = db.ref('rooms/' + ROOM);
 const R = p => p ? roomRoot.child(p) : roomRoot;     // visi žaidimo duomenys eina per čia
-let roomMeta = undefined;         // undefined = kraunama, null = kambario nėra
+let roomMeta = undefined;         // undefined = kraunama, null = žaidimas dar nesukurtas (GM sukuria pirmą kartą)
 let gmOk = undefined;             // undefined = kraunama, false = ne GM, true = GM
 let myUid = null;
 
@@ -517,11 +511,6 @@ function toast(msg, isErr, ms) {
 function show(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
     $(id).classList.remove('hidden');
-}
-function showNoRoom() {
-    $('noroom-title').innerText = ROOM ? 'Žaidimas „' + ROOM + '“ nerastas' : 'Nenurodytas žaidimo kodas';
-    $('noroom-text').innerText = ROOM ? 'Patikrinkite kodą arba paprašykite organizatoriaus naujos nuorodos.' : 'Naudokite nuorodą, kurią gavote iš organizatoriaus (ji turi ?room=KODAS).';
-    show('screen-noroom');
 }
 function waitScreen(title, text) {
     $('wait-title').innerText = title;
@@ -897,27 +886,54 @@ function updateKillBtn() {
 const normKey = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 async function submitPin() {
-    if (gmOk === undefined || !myUid) return;
+    if (!myUid) return;
     const key = normKey($('pinInput').value);
+    if (roomMeta === null) return setupGame(key);
+    if (gmOk === undefined) return;
     if (key.length < 6) return toast('GM kodas per trumpas.', true);
     try {
         await R('gms/' + myUid).set(key);       // taisyklės priims tik teisingą kodą
         $('pinInput').value = '';
-        touchRoom();
     } catch (e) {
         if (e && /permission/i.test(e.message || e.code || '')) toast('Neteisingas GM kodas.', true);
         else dbError(e);
     }
 }
 $('pinInput').addEventListener('keydown', e => { if (e.key === 'Enter') submitPin(); });
+$('pinInput2').addEventListener('keydown', e => { if (e.key === 'Enter') submitPin(); });
 
 function renderPin() {
+    if (roomMeta === null) {                 // pirmas paleidimas
+        $('pin-title').innerText = 'Pirmas paleidimas';
+        $('pin-text').innerText = 'Sugalvokite GM kodą (6–12 raidžių ar skaičių). Jį naudosite kiekvieną kartą prisijungdami kaip GM.';
+        $('pinInput2').classList.remove('hidden');
+        $('pinInput2').type = 'text';
+        $('pinInput2').placeholder = 'Pakartokite GM kodą';
+        $('pinBtn').innerText = 'Sukurti žaidimą';
+        $('pinBtn').disabled = false;
+        return;
+    }
     const loading = gmOk === undefined;
     $('pin-title').innerText = 'GM prieiga';
-    $('pin-text').innerText = loading ? 'Kraunama...' : 'Įveskite GM kodą, kurį gavote kurdami žaidimą.';
+    $('pin-text').innerText = loading ? 'Kraunama...' : 'Įveskite GM kodą.';
     $('pinInput2').classList.add('hidden');
     $('pinBtn').innerText = 'Prisijungti';
     $('pinBtn').disabled = loading;
+}
+// Vienkartinis žaidimo sukūrimas: GM kodas, GM teisės šiam telefonui ir pavadinimas.
+async function setupGame(key) {
+    if (key.length < 6 || key.length > 12) return toast('GM kodas turi būti 6–12 raidžių ar skaičių.', true);
+    if (normKey($('pinInput2').value) !== key) return toast('Kodai nesutampa.', true);
+    try {
+        await R('private/gmKey').set(key);     // pavyksta tik jei žaidimas dar nesukurtas
+        await R('gms/' + myUid).set(key);
+        await R('meta').set({ name: ROOM_NAME, createdAt: firebase.database.ServerValue.TIMESTAMP, keep: true });
+        $('pinInput').value = ''; $('pinInput2').value = '';
+        toast('Žaidimas sukurtas. Išsaugokite GM kodą!');
+    } catch (e) {
+        if (e && /permission/i.test(e.message || e.code || '')) toast('Žaidimas jau sukurtas – įveskite esamą GM kodą.', true, 5000);
+        else dbError(e);
+    }
 }
 
 /* ==========================================================================
@@ -1371,7 +1387,6 @@ function gmResetNfcOnly() {
    ========================================================================== */
 async function launchRound() {
     if (!isGM()) return;
-    touchRoom();
     if (players.length < 2 || players.some(p => !p.team) || !hasBothTeams()) {
         return toast('Reikia bent po vieną žaidėją kiekvienoje komandoje.', true);
     }
@@ -1464,37 +1479,8 @@ function revealResults() {
     R('gameStatus/revealed').set(true).catch(dbError);
 }
 
-// Pažymime, kad kambarys naudojamas (tik nenuolatiniams – nuolatiniai neturi roomIndex įrašo).
-function touchRoom() {
-    db.ref('roomIndex/' + ROOM + '/lastUsed').set(firebase.database.ServerValue.TIMESTAMP).catch(() => {});
-}
-// Seni kambariai ištrinami bet kurio prisijungusio telefono (taisyklės leidžia tik senesnius nei 5 d.).
-async function cleanupOldRooms() {
-    try {
-        const cutoff = now() - ROOM_TTL_DAYS * 86400000 - 120000;
-        const snap = await db.ref('roomIndex').orderByChild('lastUsed').endAt(cutoff).limitToFirst(10).once('value');
-        const codes = [];
-        snap.forEach(c => { if (c.key !== ROOM) codes.push(c.key); });
-        for (const code of codes) {
-            try { await db.ref('rooms/' + code).remove(); await db.ref('roomIndex/' + code).remove(); await db.ref('roomList/' + code).remove(); } catch (e) {}
-        }
-    } catch (e) { /* taisyklės dar neatnaujintos ar nėra ryšio – nieko tokio */ }
-}
-
-// Kambarys įrašomas į viešą atvirų kambarių sąrašą (rodomas kūrimo puslapyje). Tik GM.
-let listedOnce = false;
-function listRoom() {
-    if (listedOnce || !isGM() || !roomMeta) return;
-    listedOnce = true;
-    db.ref('roomList/' + ROOM).update({
-        name: roomMeta.name || '',
-        createdAt: roomMeta.createdAt || firebase.database.ServerValue.TIMESTAMP
-    }).catch(() => { listedOnce = false; });
-}
-
 function startGlobalTimer() {
     if (!isGM()) return;
-    touchRoom();
     R('gameStatus/startTime').set(firebase.database.ServerValue.TIMESTAMP).catch(dbError);
 }
 
@@ -2051,11 +2037,14 @@ function renderEnd() {
 }
 
 function render() {
-    if (!ROOM || roomMeta === null) { showNoRoom(); return; }
     if (roomMeta === undefined) { waitScreen('Jungiamasi...', ''); return; }
     if (!myRole) { show('screen-role'); return; }
+    if (roomMeta === null) {                 // pirmas paleidimas: GM susikuria GM kodą
+        if (myRole === 'GM') { show('screen-pin'); renderPin(); }
+        else waitScreen('Žaidimas dar neparuoštas', 'Žaidimo vedėjas dar nesukūrė žaidimo.');
+        return;
+    }
     if (myRole === 'GM' && !isGM()) { show('screen-pin'); renderPin(); return; }
-    if (myRole === 'GM') listRoom();
 
     const ph = phase();
     if (ph !== 'game' && pendingKill) closeKillerModal();
@@ -2130,9 +2119,6 @@ function attachListeners() {
 }
 
 async function init() {
-    if (!ROOM) { render(); return; }
-    // Role picker links keep the room code
-    document.querySelectorAll('#screen-role a').forEach(a => { const r = a.getAttribute('href').replace('?role=', ''); a.setAttribute('href', '?room=' + ROOM + '&role=' + r); });
     try {
         const cred = await firebase.auth().signInAnonymously();
         myUid = (cred && cred.user && cred.user.uid) || (firebase.auth().currentUser || {}).uid || null;
@@ -2143,7 +2129,6 @@ async function init() {
     }
     attachListeners();
     render();
-    setTimeout(cleanupOldRooms, 4000);
 }
 init();
 </script>

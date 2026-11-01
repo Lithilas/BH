@@ -134,7 +134,7 @@
     let created = null;
     const STATUS = { enlist: 'Registracija', nfc: 'NFC susiejimas', ended: 'Baigtas' };
     const escH = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    const roomLink = (code, role) => new URL('./', location.href).href + '?room=' + code + '&role=' + role;
+    const roomLink = (code, role) => new URL('rooms.html', location.href).href + '?room=' + code + '&role=' + role;
     function fmtDate(t) {
         if (!t) return '';
         const d = new Date(t), z = n => String(n).padStart(2, '0');
@@ -228,7 +228,7 @@
         }
     }
 
-    function gameBase() { return new URL('./', location.href).href; }
+    function gameBase() { return new URL('rooms.html', location.href).href; }
     function linkOf(role) { return gameBase() + '?room=' + created.code + '&role=' + role; }
     const LINKS = [
         { label: 'Raudona komanda', role: 'RAUDONA', dot: 'red' },
