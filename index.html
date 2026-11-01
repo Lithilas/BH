@@ -69,7 +69,7 @@
         .player-card b, .board-row .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 1.05rem; }
         .board-row .rank { width: 26px; color: var(--muted); font-variant-numeric: tabular-nums; }
         .board-row .nm { display: flex; align-items: center; gap: 8px; }
-        .board-row b:last-child { width: 32px; text-align: right; font-family: 'Barlow Condensed', sans-serif; font-size: 1.5rem; }
+        .board-row b:last-child { min-width: 44px; text-align: right; font-family: 'Barlow Condensed', sans-serif; font-size: 1.5rem; }
 
         /* Game UI */
         #timer { font: 700 6rem/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; margin: 6px 0 16px; color: var(--ink); }
@@ -151,6 +151,8 @@
         .mode-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; margin-top: 12px; }
         @media (max-width: 380px) { .two-targets .target-name { font-size: 2.3rem; } }
         #gm-targets .stat b { font-size: 1.6rem; white-space: normal; }
+        .tgt-meta { display: block; font: 500 0.78rem 'Barlow', sans-serif; color: var(--muted); margin: -2px 0 6px; }
+        .board-row .kc { color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
     </style>
 </head>
 <body>
@@ -239,13 +241,16 @@
     <div id="screen-end" class="screen hidden">
         <h2 style="margin-top:10px; margin-bottom:0;">Žaidimas baigtas</h2>
         <div id="end-summary"></div>
-        <h3 style="margin-top:20px;">Taškų lentelė</h3>
-        <div id="end-board"></div>
+        <div id="end-board-wrap">
+            <h3 style="margin-top:20px;">Taškų lentelė</h3>
+            <div id="end-board"></div>
+        </div>
         <h3>Nukavimų žurnalas</h3>
         <div id="end-feed" class="feed"></div>
         <div id="end-wait" class="muted" style="text-align:center; margin-top:25px;">Laukite, kol GM pradės naują raundą.</div>
         <div id="end-gm" class="hidden">
-            <button class="action-btn ghost" style="margin-top:25px;" onclick="newRoundKeep()">Naujas raundas (tos pačios NFC žymės)</button>
+            <button id="btnReveal" class="action-btn" style="margin-top:25px;" onclick="revealResults()">Rodyti rezultatus visiems</button>
+            <button class="action-btn ghost" style="margin-top:10px;" onclick="newRoundKeep()">Naujas raundas (tos pačios NFC žymės)</button>
             <button class="action-btn ghost" style="margin-top:10px;" onclick="newRoundWipe()">Naujas raundas (ištrinti NFC)</button>
             <button class="action-btn danger" style="margin-top:10px;" onclick="resetGame()">Viską ištrinti</button>
         </div>
@@ -310,7 +315,10 @@
    rooms/{KODAS}/meta: { name, createdAt }
    rooms/{KODAS}/private/gmKey: GM kodas (klientai jo NIEKADA neskaito; tik taisyklės jį tikrina)
    rooms/{KODAS}/gms/{uid}: GM kodas, kurį įvedė šis telefonas (taisyklės leidžia įrašyti tik teisingą)
-   gameStatus/targets: { RAUDONA: { a: <priešo id>, b: <priešo id> }, MELYNA: { a, b } }
+   gameStatus/targets: { RAUDONA: { a: <priešo id>, b: <priešo id>, aAt, bAt }, MELYNA: { … } }
+     aAt/bAt – kada taikinys paskirtas (serverio laikas); kontraktas galioja CONTRACT_MIN min.
+   players/{id}/points – slapti taškai (rodomi tik GM; visiems – kai GM paskelbia rezultatus)
+   gameStatus/revealed – true, kai GM parodo rezultatus visiems
    – kiekviena komanda medžioja DU skirtingus atsitiktinius gyvus priešininkus.
    Nukovus vieną, jo vieta užpildoma nauju atsitiktiniu gyvu priešininku.
    Jei gyvas liko tik vienas priešininkas – medžiojamas tik jis.
@@ -338,6 +346,14 @@ const KILL_MODES = {
              hint: 'Paimkite nukauto žaidėjo NFC žymę, atneškite ją į bazę ir nuskenuokite.' }
 };
 const killMode = () => (status.killMode === 'tag' ? 'tag' : 'bring');
+// Taškai: taikinys paskiriamas CONTRACT_MIN minučių. Pirmas FULL_MIN min. vertė MAX_POINTS,
+// vėliau kas minutę mažėja 1 tašku (bent 1). Pasibaigus kontraktui taikinys pakeičiamas.
+// Jei žudikas tuo metu pats yra priešų taikinys – taškai dauginami iš HUNTED_MULT.
+const CONTRACT_MIN = 15, FULL_MIN = 5, MAX_POINTS = 10, HUNTED_MULT = 3;
+// Pasibaigus kontraktui, seno taikinio žymę dar LATE_MIN min. galima nuskenuoti (vertė 1 tšk.),
+// kad nebūtų baudžiama, jei jis buvo nukautas, bet žymė dar nešama į bazę.
+const LATE_MIN = 5;
+const otherTeam = t => t === 'RAUDONA' ? 'MELYNA' : 'RAUDONA';
 const ROLES = ['GM', 'RAUDONA', 'MELYNA'];
 
 firebase.initializeApp(firebaseConfig);
@@ -525,58 +541,94 @@ const aliveEnemies = team => players.filter(p => p.team && p.team !== team && p.
 // Neapdorotos lizdų reikšmės (palaikomas ir senas formatas, kai buvo vienas id).
 function rawSlots(team) {
     const v = status.targets && status.targets[team];
-    if (!v) return { a: null, b: null };
-    if (typeof v === 'string') return { a: v, b: null };
-    return { a: v.a || null, b: v.b || null };
+    if (!v) return { a: null, b: null, aAt: null, bAt: null, late: {} };
+    if (typeof v === 'string') return { a: v, b: null, aAt: null, bAt: null, late: {} };
+    return { a: v.a || null, b: v.b || null, aAt: v.aAt || null, bAt: v.bAt || null, late: v.late || {} };
+}
+// Kontrakto pradžia: paskyrimo laikas, bet ne anksčiau nei laikmačio startas.
+function slotStart(at) {
+    if (!status.startTime) return null;
+    return Math.max(at || 0, status.startTime);
+}
+function slotExpired(at) {
+    const st = slotStart(at);
+    return st !== null && now() >= st + CONTRACT_MIN * 60000;
+}
+// Taikinio vertė (be daugiklio) šiuo metu.
+function contractValue(at) {
+    const st = slotStart(at);
+    if (st === null) return MAX_POINTS;
+    const m = Math.floor(Math.max(0, now() - st) / 60000);
+    if (m < FULL_MIN) return MAX_POINTS;
+    return Math.max(1, MAX_POINTS - (m - FULL_MIN + 1));
+}
+function contractLeftSec(at) {
+    const st = slotStart(at);
+    if (st === null) return CONTRACT_MIN * 60;
+    return Math.max(0, Math.ceil((st + CONTRACT_MIN * 60000 - now()) / 1000));
 }
 function validTarget(id, team) {
     if (!id) return null;
     const p = players.find(x => x.id === id);
     return (p && p.isAlive && p.team && p.team !== team) ? p : null;
 }
-// Galiojantys komandos taikiniai (0–2, be dublikatų), su lizdo pavadinimu.
+// Galiojantys komandos taikiniai (0–2, be dublikatų, nepasibaigę), su lizdu ir paskyrimo laiku.
 function getTeamTargets(team) {
     const raw = rawSlots(team), out = [];
     SLOTS.forEach(k => {
+        const at = raw[k + 'At'];
         const p = validTarget(raw[k], team);
-        if (p && !out.some(o => o.id === p.id)) out.push(Object.assign({ slot: k }, p));
+        if (p && !slotExpired(at) && !out.some(o => o.id === p.id)) out.push(Object.assign({ slot: k, at: at }, p));
     });
     return out;
 }
+// Taikiniai, kurių kontraktas ką tik baigėsi (dar galima nuskenuoti LATE_MIN min.).
+function getLateTargets(team) {
+    const late = rawSlots(team).late, t = now();
+    return Object.keys(late).filter(id => late[id] > t).map(id => validTarget(id, team)).filter(Boolean);
+}
 
 // Jei kuris nors lizdas tuščias ar nebegalioja (nukautas, pašalintas, pakeista komanda,
-// dublikatas) – paskiriamas naujas atsitiktinis. Tai gali bandyti bet kuris telefonas;
-// transakcija užtikrina, kad pakeitimą atlieka tik pirmasis.
+// dublikatas, pasibaigė kontraktas) – paskiriamas naujas atsitiktinis. Tai gali bandyti bet kuris
+// telefonas; transakcija užtikrina, kad pakeitimą atlieka tik pirmasis.
 const targetFix = {};
 function ensureTargets() {
     if (phase() !== 'game' || !players.length) return;
+    const started = !!status.startTime && now() >= status.startTime;
     ['RAUDONA', 'MELYNA'].forEach(team => {
         if (targetFix[team]) return;
         const raw = rawSlots(team);
         const legacy = status.targets && typeof status.targets[team] === 'string';
-        const va = validTarget(raw.a, team);
-        const vb = (raw.b && raw.b !== raw.a) ? validTarget(raw.b, team) : null;
-        const need = [];
-        if (!va) need.push('a');
-        if (!vb) need.push('b');
+        const okA = validTarget(raw.a, team) && !slotExpired(raw.aAt) ? raw.a : null;
+        const okB = raw.b && raw.b !== raw.a && validTarget(raw.b, team) && !slotExpired(raw.bAt) ? raw.b : null;
+        const next = { a: okA, b: okB, aAt: okA ? raw.aAt : null, bAt: okB ? raw.bAt : null };
+        const need = SLOTS.filter(k => !next[k]);
         if (!need.length && !legacy) return;
-        const keep = [va, vb].filter(Boolean).map(p => p.id);
-        const next = { a: va ? va.id : null, b: vb ? vb.id : null };
+        // Pasibaigusio kontrakto taikinys neskiriamas iš karto vėl (jei yra kitų pasirinkimų).
+        const expiredIds = SLOTS.filter(k => raw[k] && slotExpired(raw[k + 'At'])).map(k => raw[k]);
+        const late = {};
+        Object.keys(raw.late).forEach(id => { if (raw.late[id] > now()) late[id] = raw.late[id]; });
+        expiredIds.forEach(id => { if (!late[id]) late[id] = now() + LATE_MIN * 60000; });
+        const keep = [okA, okB].filter(Boolean);
         need.forEach(k => {
-            const c = pickTarget(aliveEnemies(team), keep);
-            if (c) { next[k] = c.id; keep.push(c.id); }
+            const pool = aliveEnemies(team);
+            const c = pickTarget(pool, keep.concat(expiredIds)) || pickTarget(pool, keep);
+            if (c) { next[k] = c.id; next[k + 'At'] = started ? now() : null; keep.push(c.id); }
         });
-        // Jei b užpildytas, o a ne – perkeliame į a (pirmasis lizdas visada naudojamas pirmiau).
-        if (!next.a && next.b) { next.a = next.b; next.b = null; }
-        const curA = raw.a, curB = raw.b;
-        if (!legacy && next.a === curA && next.b === curB) return;   // nėra ką keisti
+        // Jei b užpildytas, o a ne – perkeliame į a.
+        if (!next.a && next.b) { next.a = next.b; next.aAt = next.bAt; next.b = null; next.bAt = null; }
+        if (!legacy && next.a === raw.a && next.b === raw.b && next.aAt === raw.aAt && next.bAt === raw.bAt) return;
         const oldVal = (status.targets && status.targets[team]) || null;
         targetFix[team] = true;
         R('gameStatus/targets/' + team).transaction(cur => {
             if (cur === null && oldVal !== null) return cur;          // dar neužkrauta – Firebase pakartos
-            const same = JSON.stringify(cur) === JSON.stringify(oldVal);
-            if (!same) return;                                         // kažkas jau pakeitė – nutraukiame
-            return (next.a || next.b) ? { a: next.a, b: next.b } : null;
+            if (JSON.stringify(cur) !== JSON.stringify(oldVal)) return; // kažkas jau pakeitė – nutraukiame
+            if (!next.a && !next.b) return null;
+            const v = { a: next.a, b: next.b };
+            if (next.aAt) v.aAt = next.aAt;
+            if (next.bAt) v.bAt = next.bAt;
+            if (Object.keys(late).length) v.late = late;
+            return v;
         }).catch(() => {}).then(() => { targetFix[team] = false; });
     });
 }
@@ -636,14 +688,23 @@ setInterval(() => {
     updateTimerText();
     updateKillBtn();
     autoEndCheck();
+    if (isRunning()) {
+        ensureTargets();
+        if (myRole === 'GM' && isGM() && phase() === 'game') renderGMTargets();
+    }
 }, 1000);
 
 /* ==========================================================================
    NUBAUDA UŽ KLAIDINGĄ NUSKENAVIMĄ (išlieka po perkrovimo)
    ========================================================================== */
-const blockedUntil = () => parseInt(localStorage.getItem('bh_blockedUntil_' + ROOM) || '0', 10) || 0;
+let penaltyMem = 0;   // atsarginė reikšmė, jei naršyklė neleidžia localStorage (privatus režimas)
+function blockedUntil() {
+    try { return Math.max(penaltyMem, parseInt(localStorage.getItem('bh_blockedUntil_' + ROOM) || '0', 10) || 0); }
+    catch (e) { return penaltyMem; }
+}
 function applyPenalty() {
-    localStorage.setItem('bh_blockedUntil_' + ROOM, String(now() + PENALTY_SECONDS * 1000));
+    penaltyMem = now() + PENALTY_SECONDS * 1000;
+    try { localStorage.setItem('bh_blockedUntil_' + ROOM, String(penaltyMem)); } catch (e) {}
     updateKillBtn();
 }
 function updateKillBtn() {
@@ -872,6 +933,7 @@ async function launchRound() {
         u[b + 'order'] = null;
         u[b + 'isAlive'] = true;
         u[b + 'kills'] = 0;
+        u[b + 'points'] = 0;
         u[b + 'killedBy'] = null;
         u[b + 'diedAt'] = null;
     });
@@ -895,7 +957,7 @@ function newRoundKeep() {
     if (!isGM()) return;
     askConfirm({
         title: 'Naujas raundas?',
-        text: 'Visi žaidėjai ir NFC žymės liks. Taškai bus nunulinti, žaidėjai prikelti, bus išrinkti nauji atsitiktiniai taikiniai, žurnalas išvalytas.',
+        text: 'Visi žaidėjai ir NFC žymės liks. Taškai ir nukovimai bus nunulinti, žaidėjai prikelti, bus išrinkti nauji atsitiktiniai taikiniai, žurnalas išvalytas.',
         okLabel: 'Pradėti naują raundą',
         onOk: launchRound
     });
@@ -914,6 +976,7 @@ function newRoundWipe() {
                 u[b + 'nfcId'] = null;
                 u[b + 'isAlive'] = true;
                 u[b + 'kills'] = 0;
+                u[b + 'points'] = 0;
                 u[b + 'killedBy'] = null;
                 u[b + 'diedAt'] = null;
                 u[b + 'order'] = null;
@@ -944,6 +1007,11 @@ function setKillMode(m) {
     if (!isGM() || !KILL_MODES[m]) return;
     if (status.startTime) return toast('Režimą galima keisti tik prieš pradedant laiką.', true);
     R('gameStatus/killMode').set(m).catch(dbError);
+}
+
+function revealResults() {
+    if (!isGM()) return;
+    R('gameStatus/revealed').set(true).catch(dbError);
 }
 
 function startGlobalTimer() {
@@ -1026,14 +1094,24 @@ function killScan() {
     waitForTag('killBtn', KILL_IDLE_TEXT, 'Laukiama NFC... (spauskite, kad atšauktumėte)', serial => {
         if (!isRunning()) return toast('Laikmatis nevyksta – nukovimas negalimas.', true);
         const targets = getTeamTargets(myRole);        // taikiniai užfiksuojami nuskenavimo metu
-        if (!targets.length) return toast('Šiuo metu taikinio nėra.', true);
-        const target = targets.find(t => t.nfcId && t.nfcId === serial);
+        if (!targets.length && !getLateTargets(myRole).length) return toast('Šiuo metu taikinio nėra.', true);
+        let target = targets.find(t => t.nfcId && t.nfcId === serial);
+        let lateHit = false;
+        if (!target) {
+            const lt = getLateTargets(myRole).find(t => t.nfcId && t.nfcId === serial && !targets.some(x => x.id === t.id));
+            if (lt) { target = lt; lateHit = true; }
+        }
         if (!target) {
             applyPenalty();
             logMiss();
             return toast(`Klaida: nuskenuota ne jūsų taikinių žymė! Blokuota ${PENALTY_SECONDS}s.`, true, 4000);
         }
-        pendingKill = { id: target.id, name: target.name, team: target.team };
+        // Vertė ir „ar žudikas medžiojamas“ fiksuojami nuskenavimo metu.
+        pendingKill = {
+            id: target.id, name: target.name, team: target.team,
+            value: lateHit ? 1 : contractValue(target.at),
+            huntedIds: getTeamTargets(otherTeam(myRole)).map(x => x.id)
+        };
         $('killer-target').innerText = target.name;
         renderKillerList();
         $('killer-modal').classList.remove('hidden');
@@ -1063,7 +1141,8 @@ async function pickKiller(id) {
     const hunter = players.find(p => p.id === id && p.team === myRole);
     if (!hunter) return toast('Žaidėjas nerastas – pasirinkite iš naujo.', true);
     closeKillerModal();
-    await confirmKill(hunter, t);
+    const triple = t.huntedIds.includes(hunter.id);
+    await confirmKill(hunter, t, t.value * (triple ? HUNTED_MULT : 1), triple);
 }
 
 function logMiss() {
@@ -1074,7 +1153,8 @@ function logMiss() {
 
 // Atominis nukovimas: transakcija užtikrina, kad taikinys miršta tik kartą
 // ir tašką gauna tik tas medžiotojas, kuriam transakcija pavyko.
-async function confirmKill(hunter, target) {
+async function confirmKill(hunter, target, pts, triple) {
+    pts = pts || 1;
     try {
         const res = await R('players/' + target.id).transaction(p => {
             if (p === null) return p;          // dar neužkrauta / ištrintas
@@ -1091,15 +1171,17 @@ async function confirmKill(hunter, target) {
         await R('players/' + hunter.id).transaction(p => {
             if (p === null) return p;          // medžiotojas ištrintas – neprikuriame "vaiduoklio"
             p.kills = (p.kills || 0) + 1;
+            p.points = (p.points || 0) + pts;
             return p;
         });
         await R('log').push({
             type: 'kill',
             hunterId: hunter.id, hunterName: hunter.name, hunterTeam: hunter.team,
             targetId: target.id, targetName: target.name, targetTeam: target.team,
+            points: pts, hunted: !!triple,
             t: firebase.database.ServerValue.TIMESTAMP
         });
-        toast(`Nukovimas patvirtintas! Taškas: ${hunter.name}`);
+        toast(`Nukovimas patvirtintas: ${hunter.name}`);   // taškai slapti iki pabaigos
         checkTeamElimination();
     } catch (e) { dbError(e); }
 }
@@ -1136,7 +1218,9 @@ function feedLine(l) {
             : `<b style="color:${teamColor(l.hunterTeam)}">${teamLabel(l.hunterTeam)} komanda</b>`;
         return `<div class="feed-line miss">${tm}${who} nuskenavo klaidingą žymę</div>`;
     }
-    return `<div class="feed-line">${tm}${nameSpan(l.hunterName, l.hunterTeam)} nukovė ${nameSpan(l.targetName, l.targetTeam)}</div>`;
+    const showPts = l.points && (myRole === 'GM' || status.revealed);
+    const pts = showPts ? ` <span class="muted">+${l.points}${l.hunted ? ' (×' + HUNTED_MULT + ')' : ''}</span>` : '';
+    return `<div class="feed-line">${tm}${nameSpan(l.hunterName, l.hunterTeam)} nukovė ${nameSpan(l.targetName, l.targetTeam)}${pts}</div>`;
 }
 function renderFeed(containerId, limit) {
     const c = $(containerId);
@@ -1193,12 +1277,7 @@ function renderGM() {
             <div class="seg">${Object.keys(KILL_MODES).map(k => `
                 <button class="${k === km ? 'on' : ''}" onclick="setKillMode('${k}')">${KILL_MODES[k].title}<small>${KILL_MODES[k].short}</small></button>`).join('')}
             </div></div>`;
-    const names = tm => { const l = getTeamTargets(tm); return l.length ? l.map(x => esc(x.name)).join('<br>') : '—'; };
-    $('gm-targets').innerHTML = `
-        <div class="score-strip" style="margin-top:12px;">
-            <div class="stat"><span class="lbl">Raudonų taikiniai</span><b style="color:var(--red)">${names('RAUDONA')}</b></div>
-            <div class="stat"><span class="lbl">Mėlynų taikiniai</span><b style="color:var(--blue)">${names('MELYNA')}</b></div>
-        </div>`;
+    renderGMTargets();
 
     $('gm-player-list').innerHTML = players.map(p => {
         const hunted = ['RAUDONA', 'MELYNA'].some(tm => { return getTeamTargets(tm).some(x => x.id === p.id); });
@@ -1212,7 +1291,8 @@ function renderGM() {
             <div class="gm-meta">
                 <span><i class="dot ${p.isAlive ? 'ok' : 'bad'}"></i>${p.isAlive ? 'Gyvas' : 'Nukautas'}</span>
                 <span>NFC <b style="${p.nfcId ? '' : 'color:var(--red-ink);'}">${p.nfcId ? 'susietas' : 'nėra'}</b></span>
-                <span>Taškai <b>${p.kills || 0}</b></span>
+                <span>Nukovė <b>${p.kills || 0}</b></span>
+                <span>Taškai <b>${p.points || 0}</b></span>
             </div>
             <div class="gm-actions">
                 <button class="gm-btn" onclick="gmSwapTeam('${p.id}')">Keisti</button>
@@ -1221,6 +1301,22 @@ function renderGM() {
             </div>
         </div>`;
     }).join('');
+}
+
+function renderGMTargets() {
+    const el = $('gm-targets');
+    if (!el) return;
+    const running = !!status.startTime;
+    const names = tm => {
+        const l = getTeamTargets(tm);
+        if (!l.length) return '—';
+        return l.map(x => `${esc(x.name)}${running ? `<span class="tgt-meta">${contractValue(x.at)} tšk. · liko ${fmt(contractLeftSec(x.at))}</span>` : ''}`).join('');
+    };
+    el.innerHTML = `
+        <div class="score-strip" style="margin-top:12px;">
+            <div class="stat"><span class="lbl">Raudonų taikiniai</span><b style="color:var(--red)">${names('RAUDONA')}</b></div>
+            <div class="stat"><span class="lbl">Mėlynų taikiniai</span><b style="color:var(--blue)">${names('MELYNA')}</b></div>
+        </div>`;
 }
 
 function renderGame() {
@@ -1240,45 +1336,57 @@ const END_REASONS = {
 };
 
 function renderEnd() {
-    const stat = t => ({
-        alive: players.filter(p => p.team === t && p.isAlive).length,
-        total: players.filter(p => p.team === t).length,
-        kills: players.filter(p => p.team === t).reduce((s, p) => s + (p.kills || 0), 0)
-    });
+    const gm = myRole === 'GM';
+    const open = gm || !!status.revealed;          // taškai matomi GM, o kitiems – tik paskelbus
+    const stat = t => {
+        const list = players.filter(p => p.team === t);
+        return {
+            alive: list.filter(p => p.isAlive).length, total: list.length,
+            kills: list.reduce((s, p) => s + (p.kills || 0), 0),
+            points: list.reduce((s, p) => s + (p.points || 0), 0)
+        };
+    };
     const r = stat('RAUDONA'), b = stat('MELYNA');
-    let winner = null;
-    if (r.alive !== b.alive) winner = r.alive > b.alive ? 'RAUDONA' : 'MELYNA';
-    else if (r.kills !== b.kills) winner = r.kills > b.kills ? 'RAUDONA' : 'MELYNA';
-
     const dur = (status.startTime && status.endTime)
         ? fmt(Math.max(0, Math.floor((status.endTime - status.startTime) / 1000))) : '--:--';
+    const lead = r.points === b.points ? null : (r.points > b.points ? 'RAUDONA' : 'MELYNA');
+    const reason = `${END_REASONS[status.endReason] || ''} Žaidimo trukmė: ${dur}`;
 
-    const wColor = winner ? teamColor(winner) : 'var(--ink)';
-    $('end-summary').innerHTML = `
-        <div class="winner-banner" style="border-color:${wColor}">
-            <h1 style="color:${wColor}">${winner ? teamLabel(winner) + ' komanda laimėjo!' : 'Lygiosios'}</h1>
-            <p class="muted">${END_REASONS[status.endReason] || ''} Žaidimo trukmė: ${dur}</p>
-        </div>
-        <div class="score-strip">
-            <div class="stat"><span class="lbl">Raudoni</span><b style="color:var(--red)">${r.alive}/${r.total} gyvi</b><span class="sub">${r.kills} taškai</span></div>
-            <div class="stat"><span class="lbl">Mėlyni</span><b style="color:var(--blue)">${b.alive}/${b.total} gyvi</b><span class="sub">${b.kills} taškai</span></div>
-        </div>
-        <p class="muted small">Nugalėtojas: daugiau gyvų žaidėjų; esant lygiai – daugiau taškų.</p>`;
+    if (!open) {
+        $('end-summary').innerHTML = `
+            <div class="winner-banner">
+                <h1>Laukite rezultatų</h1>
+                <p class="muted">${reason}<br>Nugalėtoją paskelbs GM.</p>
+            </div>`;
+    } else {
+        const head = gm && !status.revealed
+            ? `<h1>Rezultatai (mato tik GM)</h1><p class="muted">${reason}<br>${lead ? 'Daugiau taškų: ' + teamLabel(lead) + ' komanda.' : 'Taškų lygiai.'} Paskelbkite nugalėtoją ir spauskite „Rodyti rezultatus visiems“.</p>`
+            : `<h1 style="color:${lead ? teamColor(lead) : 'var(--ink)'}">${lead ? teamLabel(lead) + ' komanda surinko daugiau taškų' : 'Taškų lygiai'}</h1><p class="muted">${reason}</p>`;
+        $('end-summary').innerHTML = `
+            <div class="winner-banner" style="border-color:${lead && status.revealed ? teamColor(lead) : 'var(--line-strong)'}">${head}</div>
+            <div class="score-strip">
+                <div class="stat"><span class="lbl">Raudoni</span><b style="color:var(--red)">${r.points} tšk.</b><span class="sub">${r.kills} nukov. · ${r.alive}/${r.total} gyvi</span></div>
+                <div class="stat"><span class="lbl">Mėlyni</span><b style="color:var(--blue)">${b.points} tšk.</b><span class="sub">${b.kills} nukov. · ${b.alive}/${b.total} gyvi</span></div>
+            </div>`;
+    }
 
-    const sorted = players.slice().sort((x, y) =>
-        (y.kills || 0) - (x.kills || 0) || (y.isAlive ? 1 : 0) - (x.isAlive ? 1 : 0) || x.name.localeCompare(y.name));
-    const topKills = sorted.length ? (sorted[0].kills || 0) : 0;
-    $('end-board').innerHTML = sorted.map((p, i) => `
-        <div class="board-row">
-            <span class="rank">${i + 1}.</span>
-            <span class="nm"><i class="dot" style="background:${teamColor(p.team)}; margin-right:0;"></i><span style="overflow:hidden; text-overflow:ellipsis;">${esc(p.name)}</span>${topKills > 0 && (p.kills || 0) === topKills ? '<span class="pill ok">Lyderis</span>' : ''}</span>
-            <span class="muted small">${p.isAlive ? 'gyvas' : 'nukautas'}</span>
-            <b>${p.kills || 0}</b>
-        </div>`).join('');
+    $('end-board-wrap').classList.toggle('hidden', !open);
+    if (open) {
+        const sorted = players.slice().sort((x, y) =>
+            (y.points || 0) - (x.points || 0) || (y.kills || 0) - (x.kills || 0) || x.name.localeCompare(y.name, 'lt'));
+        const top = sorted.length ? (sorted[0].points || 0) : 0;
+        $('end-board').innerHTML = sorted.map((p, i) => `
+            <div class="board-row">
+                <span class="rank">${i + 1}.</span>
+                <span class="nm"><i class="dot" style="background:${teamColor(p.team)}; margin-right:0;"></i><span style="overflow:hidden; text-overflow:ellipsis;">${esc(p.name)}</span>${top > 0 && (p.points || 0) === top ? '<span class="pill ok">Lyderis</span>' : ''}</span>
+                <span class="kc">${p.kills || 0} nukov.</span>
+                <b>${p.points || 0}</b>
+            </div>`).join('');
+    }
 
     renderFeed('end-feed', 100);
-    const gm = myRole === 'GM';
     $('end-gm').classList.toggle('hidden', !gm);
+    $('btnReveal').classList.toggle('hidden', !gm || !!status.revealed);
     $('end-wait').classList.toggle('hidden', gm);
 }
 
