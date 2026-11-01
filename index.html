@@ -136,6 +136,9 @@
 
         @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
         @media (max-width: 380px) { #timer { font-size: 5rem; } .target-name { font-size: 3rem; } }
+        .two-targets .target-name { font-size: 2.7rem; }
+        @media (max-width: 380px) { .two-targets .target-name { font-size: 2.3rem; } }
+        #gm-targets .stat b { font-size: 1.6rem; white-space: normal; }
     </style>
 </head>
 <body>
@@ -294,9 +297,10 @@
    rooms/{KODAS}/meta: { name, createdAt }
    rooms/{KODAS}/private/gmKey: GM kodas (klientai jo NIEKADA neskaito; tik taisyklės jį tikrina)
    rooms/{KODAS}/gms/{uid}: GM kodas, kurį įvedė šis telefonas (taisyklės leidžia įrašyti tik teisingą)
-   gameStatus/targets: { RAUDONA: <priešo žaidėjo id>, MELYNA: <priešo žaidėjo id> }
-   – kiekviena komanda medžioja VIENĄ atsitiktinį gyvą priešininką. Nukovus,
-   komanda gauna naują atsitiktinį gyvą priešininką.
+   gameStatus/targets: { RAUDONA: { a: <priešo id>, b: <priešo id> }, MELYNA: { a, b } }
+   – kiekviena komanda medžioja DU skirtingus atsitiktinius gyvus priešininkus.
+   Nukovus vieną, jo vieta užpildoma nauju atsitiktiniu gyvu priešininku.
+   Jei gyvas liko tik vienas priešininkas – medžiojamas tik jis.
    ========================================================================== */
 
 const firebaseConfig = {
@@ -484,38 +488,74 @@ async function waitForTag(btnId, idleText, waitText, cb) {
 document.addEventListener('visibilitychange', () => { if (document.hidden) cancelNfcWait(); });
 
 /* ==========================================================================
-   TAIKINIAI: kiekviena komanda medžioja vieną atsitiktinį gyvą priešininką
+   TAIKINIAI: kiekviena komanda medžioja du atsitiktinius gyvus priešininkus
    ========================================================================== */
-function pickTarget(list) {
-    if (!list.length) return null;
-    const tagged = list.filter(p => p.nfcId);          // pirmenybė žaidėjams su NFC žyme
-    const pool = tagged.length ? tagged : list;
+const SLOTS = ['a', 'b'];
+function pickTarget(list, excludeIds) {
+    const ex = excludeIds || [];
+    const free = list.filter(p => !ex.includes(p.id));
+    if (!free.length) return null;
+    const tagged = free.filter(p => p.nfcId);          // pirmenybė žaidėjams su NFC žyme
+    const pool = tagged.length ? tagged : free;
     return pool[Math.floor(Math.random() * pool.length)];
 }
 const aliveEnemies = team => players.filter(p => p.team && p.team !== team && p.isAlive);
 
-function getTeamTarget(team) {
-    const id = status.targets && status.targets[team];
+// Neapdorotos lizdų reikšmės (palaikomas ir senas formatas, kai buvo vienas id).
+function rawSlots(team) {
+    const v = status.targets && status.targets[team];
+    if (!v) return { a: null, b: null };
+    if (typeof v === 'string') return { a: v, b: null };
+    return { a: v.a || null, b: v.b || null };
+}
+function validTarget(id, team) {
     if (!id) return null;
     const p = players.find(x => x.id === id);
-    return (p && p.isAlive && p.team !== team) ? p : null;
+    return (p && p.isAlive && p.team && p.team !== team) ? p : null;
+}
+// Galiojantys komandos taikiniai (0–2, be dublikatų), su lizdo pavadinimu.
+function getTeamTargets(team) {
+    const raw = rawSlots(team), out = [];
+    SLOTS.forEach(k => {
+        const p = validTarget(raw[k], team);
+        if (p && !out.some(o => o.id === p.id)) out.push(Object.assign({ slot: k }, p));
+    });
+    return out;
 }
 
-// Jei komandos taikinys nebegalioja (nukautas, pašalintas, pakeista komanda) –
-// paskiriamas naujas atsitiktinis. Tai gali bandyti bet kuris telefonas; transakcija
-// užtikrina, kad pakeitimą atlieka tik pirmasis.
+// Jei kuris nors lizdas tuščias ar nebegalioja (nukautas, pašalintas, pakeista komanda,
+// dublikatas) – paskiriamas naujas atsitiktinis. Tai gali bandyti bet kuris telefonas;
+// transakcija užtikrina, kad pakeitimą atlieka tik pirmasis.
 const targetFix = {};
 function ensureTargets() {
     if (phase() !== 'game' || !players.length) return;
     ['RAUDONA', 'MELYNA'].forEach(team => {
-        if (targetFix[team] || getTeamTarget(team)) return;
-        const cand = pickTarget(aliveEnemies(team));
-        if (!cand) return;
-        const old = (status.targets && status.targets[team]) || null;
+        if (targetFix[team]) return;
+        const raw = rawSlots(team);
+        const legacy = status.targets && typeof status.targets[team] === 'string';
+        const va = validTarget(raw.a, team);
+        const vb = (raw.b && raw.b !== raw.a) ? validTarget(raw.b, team) : null;
+        const need = [];
+        if (!va) need.push('a');
+        if (!vb) need.push('b');
+        if (!need.length && !legacy) return;
+        const keep = [va, vb].filter(Boolean).map(p => p.id);
+        const next = { a: va ? va.id : null, b: vb ? vb.id : null };
+        need.forEach(k => {
+            const c = pickTarget(aliveEnemies(team), keep);
+            if (c) { next[k] = c.id; keep.push(c.id); }
+        });
+        // Jei b užpildytas, o a ne – perkeliame į a (pirmasis lizdas visada naudojamas pirmiau).
+        if (!next.a && next.b) { next.a = next.b; next.b = null; }
+        const curA = raw.a, curB = raw.b;
+        if (!legacy && next.a === curA && next.b === curB) return;   // nėra ką keisti
+        const oldVal = (status.targets && status.targets[team]) || null;
         targetFix[team] = true;
         R('gameStatus/targets/' + team).transaction(cur => {
-            if (cur === null && old !== null) return cur;   // dar neužkrauta – Firebase pakartos
-            return cur === old ? cand.id : undefined;       // keičiame tik jei niekas kitas nepakeitė
+            if (cur === null && oldVal !== null) return cur;          // dar neužkrauta – Firebase pakartos
+            const same = JSON.stringify(cur) === JSON.stringify(oldVal);
+            if (!same) return;                                         // kažkas jau pakeitė – nutraukiame
+            return (next.a || next.b) ? { a: next.a, b: next.b } : null;
         }).catch(() => {}).then(() => { targetFix[team] = false; });
     });
 }
@@ -814,12 +854,17 @@ async function launchRound() {
         u[b + 'killedBy'] = null;
         u[b + 'diedAt'] = null;
     });
-    const tForRed = pickTarget(players.filter(p => p.team === 'MELYNA'));
-    const tForBlue = pickTarget(players.filter(p => p.team === 'RAUDONA'));
+    const pickTwo = list => {
+        const one = pickTarget(list);
+        const two = one ? pickTarget(list, [one.id]) : null;
+        return { a: one ? one.id : null, b: two ? two.id : null };
+    };
+    const tForRed = pickTwo(players.filter(p => p.team === 'MELYNA'));
+    const tForBlue = pickTwo(players.filter(p => p.team === 'RAUDONA'));
     u['log'] = null;
     u['gameStatus'] = {
         phase: 'game', duration: DEFAULT_DURATION,
-        targets: { RAUDONA: tForRed.id, MELYNA: tForBlue.id }
+        targets: { RAUDONA: tForRed, MELYNA: tForBlue }
     };
     try { await R().update(u); } catch (e) { dbError(e); }
 }
@@ -953,13 +998,13 @@ function killScan() {
     if (Math.ceil((blockedUntil() - now()) / 1000) > 0) return;
     waitForTag('killBtn', KILL_IDLE_TEXT, 'Laukiama NFC... (spauskite, kad atšauktumėte)', serial => {
         if (!isRunning()) return toast('Laikmatis nevyksta – nukovimas negalimas.', true);
-        const target = getTeamTarget(myRole);          // taikinys užfiksuojamas nuskenavimo metu
-        if (!target) return toast('Šiuo metu taikinio nėra.', true);
-        if (!target.nfcId) return toast('Taikinys neturi NFC žymės – kreipkitės į GM.', true, 4000);
-        if (serial !== target.nfcId) {
+        const targets = getTeamTargets(myRole);        // taikiniai užfiksuojami nuskenavimo metu
+        if (!targets.length) return toast('Šiuo metu taikinio nėra.', true);
+        const target = targets.find(t => t.nfcId && t.nfcId === serial);
+        if (!target) {
             applyPenalty();
             logMiss();
-            return toast(`Klaida: nuskenuota ne jūsų taikinio žymė! Blokuota ${PENALTY_SECONDS}s.`, true, 4000);
+            return toast(`Klaida: nuskenuota ne jūsų taikinių žymė! Blokuota ${PENALTY_SECONDS}s.`, true, 4000);
         }
         pendingKill = { id: target.id, name: target.name, team: target.team };
         $('killer-target').innerText = target.name;
@@ -1076,13 +1121,18 @@ function renderHunter() {
             </div>`;
         return;
     }
-    const target = getTeamTarget(myRole);
+    const targets = getTeamTargets(myRole);
     let body;
-    if (target) {
+    if (targets.length) {
+        const rows = targets.map((t, i) => `
+            <div class="target-row"${i ? ' style="border-top:1px solid var(--line); padding-top:12px; margin-top:4px;"' : ''}>
+                <h1 class="target-name">${esc(t.name)}</h1>
+                <div class="target-team"><i class="dot" style="background:${teamColor(t.team)}"></i>${teamLabel(t.team)} komanda</div>
+            </div>`).join('');
+        const lbl = targets.length > 1 ? 'Jūsų komandos taikiniai – nukaukite bet kurį' : 'Jūsų komandos taikinys';
         body = `
-            <div class="lbl">Jūsų komandos taikinys</div>
-            <h1 class="target-name">${esc(target.name)}</h1>
-            <div class="target-team"><i class="dot" style="background:${teamColor(target.team)}"></i>${teamLabel(target.team)} komanda</div>
+            <div class="lbl">${lbl}</div>
+            ${rows}
             <button id="killBtn" class="action-btn" onclick="killScan()">${KILL_IDLE_TEXT}</button>`;
     } else if (!players.length) {
         body = `<p class="muted" style="margin:0;">Kraunama...</p>`;
@@ -1091,7 +1141,7 @@ function renderHunter() {
     } else {
         body = `<h1 style="color:var(--green); margin:0;">Misija įvykdyta</h1>`;
     }
-    el.innerHTML = teamLine + `<div class="target-frame">${body}</div>`;
+    el.innerHTML = teamLine + `<div class="target-frame${targets.length > 1 ? ' two-targets' : ''}">${body}</div>`;
     updateKillBtn();
 }
 
@@ -1100,15 +1150,15 @@ function renderGM() {
     $('btnStartTimer').classList.toggle('hidden', started);
     $('btnEndGame').classList.toggle('hidden', !started);
 
-    const tr = getTeamTarget('RAUDONA'), tb = getTeamTarget('MELYNA');
+    const names = tm => { const l = getTeamTargets(tm); return l.length ? l.map(x => esc(x.name)).join('<br>') : '—'; };
     $('gm-targets').innerHTML = `
         <div class="score-strip" style="margin-top:12px;">
-            <div class="stat"><span class="lbl">Raudonų taikinys</span><b style="color:var(--red)">${tr ? esc(tr.name) : '—'}</b></div>
-            <div class="stat"><span class="lbl">Mėlynų taikinys</span><b style="color:var(--blue)">${tb ? esc(tb.name) : '—'}</b></div>
+            <div class="stat"><span class="lbl">Raudonų taikiniai</span><b style="color:var(--red)">${names('RAUDONA')}</b></div>
+            <div class="stat"><span class="lbl">Mėlynų taikiniai</span><b style="color:var(--blue)">${names('MELYNA')}</b></div>
         </div>`;
 
     $('gm-player-list').innerHTML = players.map(p => {
-        const hunted = ['RAUDONA', 'MELYNA'].some(tm => { const x = getTeamTarget(tm); return x && x.id === p.id; });
+        const hunted = ['RAUDONA', 'MELYNA'].some(tm => { return getTeamTargets(tm).some(x => x.id === p.id); });
         return `
         <div class="gm-card ${p.isAlive ? '' : 'dead'}">
             <div class="gm-head">
