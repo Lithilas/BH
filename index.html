@@ -62,7 +62,6 @@
         .team-btn.t-blue { color: var(--blue); border-color: var(--blue); }
         .team-btn.t-red.active { background: var(--red); color: #fff; }
         .team-btn.t-blue.active { background: var(--blue); color: #fff; }
-        .link-btn { background: none; border: none; color: var(--muted); text-decoration: underline; cursor: pointer; margin-top: 14px; font: 400 0.95rem 'Barlow', sans-serif; width: 100%; min-height: 44px; }
 
         /* Cards */
         .player-card, .board-row { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: flex; align-items: center; gap: 10px; margin: 8px 0; }
@@ -105,7 +104,6 @@
         .feed-line:last-child { border-bottom: none; }
         .feed-line.miss { color: var(--muted); font-size: 0.88rem; }
         .ft { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 8px; }
-        .fk { color: var(--red-ink); font-size: 0.8rem; font-weight: 600; margin-left: 8px; }
         .feed-empty { color: var(--muted); padding: 10px 0; }
 
         /* Results */
@@ -136,9 +134,8 @@
 
         @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
         @media (max-width: 380px) { #timer { font-size: 5rem; } .target-name { font-size: 3rem; } }
-        .two-targets .target-name { font-size: 2.7rem; }
         .killer-list { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; margin-bottom: 18px; max-height: 50vh; overflow-y: auto; }
-        .killer-btn { min-height: 52px; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); font: 600 1rem 'Barlow', sans-serif; cursor: pointer; text-align: left; overflow-wrap: anywhere; }
+        .killer-btn { min-height: 52px; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); font: 600 1rem 'Barlow', sans-serif; cursor: pointer; text-align: left; }
         .killer-btn:active { background: #F4F5F7; }
         .killer-btn.dead { color: var(--muted); border-style: dashed; }
         .killer-btn small { display: block; font-weight: 500; font-size: 0.78rem; color: var(--muted); }
@@ -149,7 +146,6 @@
         .seg button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
         .seg button.on small { color: #D9DCE2; }
         .mode-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; margin-top: 12px; }
-        @media (max-width: 380px) { .two-targets .target-name { font-size: 2.3rem; } }
         #gm-targets .stat b { font-size: 1.6rem; white-space: normal; }
         .av { flex: 0 0 auto; border-radius: 50%; object-fit: cover; background: #E9EBEF; border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; color: var(--muted); font: 600 0.9rem 'Barlow', sans-serif; overflow: hidden; }
         .target-head { display: flex; align-items: center; gap: 14px; min-width: 0; }
@@ -257,7 +253,7 @@
             <button class="action-btn danger" style="margin-top:10px;" onclick="resetGame()">Viską ištrinti</button>
         </div>
 
-        <h3>Nukavimų žurnalas</h3>
+        <h3>Nukovimų žurnalas</h3>
         <div id="feed" class="feed"></div>
     </div>
 
@@ -269,7 +265,7 @@
             <h3 style="margin-top:20px;">Taškų lentelė</h3>
             <div id="end-board"></div>
         </div>
-        <h3>Nukavimų žurnalas</h3>
+        <h3>Nukovimų žurnalas</h3>
         <div id="end-feed" class="feed"></div>
         <div id="end-wait" class="muted" style="text-align:center; margin-top:25px;">Laukite, kol GM pradės naują raundą.</div>
         <div id="end-gm" class="hidden">
@@ -334,7 +330,8 @@
 /* ==========================================================================
    DUOMENŲ STRUKTŪRA (Firebase Realtime Database)
    gameStatus: { phase: 'enlist'|'nfc'|'game'|'ended', startTime, duration, endTime, endReason, killMode: 'bring'|'tag' }
-   players/{id}: { name, team, nfcId, isAlive, kills, joined, killedBy, diedAt }
+   players/{id}: { name (slapyvardis), realName?, photo? (100×100 JPEG data URL), team, nfcId,
+                   isAlive, kills, points, joined, killedBy, diedAt }
    log/{pushId}: { type:'kill'|'miss', hunterId?, hunterName?, hunterTeam, targetId?, targetName?, targetTeam?, t }
    Visi duomenys laikomi kambaryje: rooms/{KODAS}/…  (kodas – iš nuorodos ?room=KODAS)
    rooms/{KODAS}/meta: { name, createdAt }
@@ -581,11 +578,10 @@ function pickTarget(list, excludeIds) {
 }
 const aliveEnemies = team => players.filter(p => p.team && p.team !== team && p.isAlive);
 
-// Neapdorotos lizdų reikšmės (palaikomas ir senas formatas, kai buvo vienas id).
+// Neapdorotos lizdų reikšmės.
 function rawSlots(team) {
     const v = status.targets && status.targets[team];
     if (!v) return { a: null, b: null, aAt: null, bAt: null, late: {} };
-    if (typeof v === 'string') return { a: v, b: null, aAt: null, bAt: null, late: {} };
     return { a: v.a || null, b: v.b || null, aAt: v.aAt || null, bAt: v.bAt || null, late: v.late || {} };
 }
 // Kontrakto pradžia: paskyrimo laikas, bet ne anksčiau nei laikmačio startas.
@@ -641,12 +637,11 @@ function ensureTargets() {
     ['RAUDONA', 'MELYNA'].forEach(team => {
         if (targetFix[team]) return;
         const raw = rawSlots(team);
-        const legacy = status.targets && typeof status.targets[team] === 'string';
         const okA = validTarget(raw.a, team) && !slotExpired(raw.aAt) ? raw.a : null;
         const okB = raw.b && raw.b !== raw.a && validTarget(raw.b, team) && !slotExpired(raw.bAt) ? raw.b : null;
         const next = { a: okA, b: okB, aAt: okA ? raw.aAt : null, bAt: okB ? raw.bAt : null };
         const need = SLOTS.filter(k => !next[k]);
-        if (!need.length && !legacy) return;
+        if (!need.length) return;
         // Pasibaigusio kontrakto taikinys neskiriamas iš karto vėl (jei yra kitų pasirinkimų).
         const expiredIds = SLOTS.filter(k => raw[k] && slotExpired(raw[k + 'At'])).map(k => raw[k]);
         const late = {};
@@ -660,7 +655,7 @@ function ensureTargets() {
         });
         // Jei b užpildytas, o a ne – perkeliame į a.
         if (!next.a && next.b) { next.a = next.b; next.aAt = next.bAt; next.b = null; next.bAt = null; }
-        if (!legacy && next.a === raw.a && next.b === raw.b && next.aAt === raw.aAt && next.bAt === raw.bAt) return;
+        if (next.a === raw.a && next.b === raw.b && next.aAt === raw.aAt && next.bAt === raw.bAt) return;
         const oldVal = (status.targets && status.targets[team]) || null;
         targetFix[team] = true;
         R('gameStatus/targets/' + team).transaction(cur => {
@@ -1218,7 +1213,6 @@ async function launchRound() {
     const u = {};
     players.forEach(p => {
         const b = 'players/' + p.id + '/';
-        u[b + 'order'] = null;
         u[b + 'isAlive'] = true;
         u[b + 'kills'] = 0;
         u[b + 'points'] = 0;
@@ -1267,7 +1261,6 @@ function newRoundWipe() {
                 u[b + 'points'] = 0;
                 u[b + 'killedBy'] = null;
                 u[b + 'diedAt'] = null;
-                u[b + 'order'] = null;
             });
             u['log'] = null;
             u['gameStatus'] = { phase: 'nfc' };
@@ -1553,7 +1546,7 @@ function renderHunter() {
     } else {
         body = `<h1 style="color:var(--green); margin:0;">Misija įvykdyta</h1>`;
     }
-    el.innerHTML = teamLine + `<div class="target-frame${targets.length > 1 ? ' two-targets' : ''}">${body}</div>`;
+    el.innerHTML = teamLine + `<div class="target-frame">${body}</div>`;
     updateKillBtn();
 }
 
