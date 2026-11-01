@@ -1,0 +1,69 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "rooms": {
+      "$room": {
+        ".write": "auth != null && !newData.exists() && root.child('roomIndex').child($room).child('lastUsed').val() < now - 432000000",
+        "meta": {
+          ".read": "auth != null",
+          ".write": "auth != null && (!data.exists() || root.child('rooms').child($room).child('gms').child(auth.uid).exists())"
+        },
+        "private": {
+          "gmKey": {
+            ".write": "auth != null && (!data.exists() || root.child('rooms').child($room).child('gms').child(auth.uid).exists())",
+            ".validate": "newData.isString() && newData.val().length >= 6 && newData.val().length <= 24"
+          }
+        },
+        "gms": {
+          "$uid": {
+            ".read": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && auth.uid === $uid && newData.val() === root.child('rooms').child($room).child('private').child('gmKey').val()"
+          }
+        },
+        "gameStatus": {
+          ".read": "auth != null",
+          ".write": "auth != null && root.child('rooms').child($room).child('gms').child(auth.uid).exists()",
+          "phase": {
+            ".write": "auth != null && data.val() === 'game' && newData.val() === 'ended'"
+          },
+          "endReason": {
+            ".write": "auth != null && root.child('rooms').child($room).child('gameStatus').child('phase').val() === 'ended'"
+          },
+          "endTime": {
+            ".write": "auth != null && root.child('rooms').child($room).child('gameStatus').child('phase').val() === 'ended'"
+          },
+          "targets": {
+            ".write": "auth != null"
+          }
+        },
+        "players": {
+          ".read": "auth != null",
+          ".write": "auth != null && root.child('rooms').child($room).child('gms').child(auth.uid).exists()",
+          "$pid": {
+            ".write": "auth != null && data.exists() && newData.exists()"
+          }
+        },
+        "log": {
+          ".read": "auth != null",
+          ".write": "auth != null && root.child('rooms').child($room).child('gms').child(auth.uid).exists()",
+          "$lid": {
+            ".write": "auth != null && !data.exists() && newData.exists()"
+          }
+        }
+      }
+    },
+    "roomIndex": {
+      ".read": "auth != null && query.orderByChild == 'lastUsed' && query.endAt <= now - 432000000",
+      ".indexOn": [
+        "lastUsed"
+      ],
+      "$code": {
+        ".write": "auth != null && ((!data.exists() && newData.child('lastUsed').val() <= now && root.child('rooms').child($code).child('gms').child(auth.uid).exists()) || (!newData.exists() && data.child('lastUsed').val() < now - 432000000))",
+        "lastUsed": {
+          ".write": "auth != null && data.exists() && newData.isNumber() && newData.val() <= now && root.child('rooms').child($code).child('gms').child(auth.uid).exists()"
+        }
+      }
+    }
+  }
+}

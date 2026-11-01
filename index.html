@@ -249,6 +249,8 @@
             <div id="gm-mode"></div>
             <div id="gm-targets"></div>
             <h3>Žaidėjai</h3>
+            <input type="search" id="gmSearch" placeholder="Ieškoti žaidėjo (slapyvardis ar vardas)" autocomplete="off" style="margin:8px 0 0;" oninput="renderGM()">
+            <p id="gm-list-sum" class="muted small" style="margin:8px 0 0;"></p>
             <div id="gm-player-list"></div>
 
             <button id="btnStartTimer" class="action-btn" style="margin-top:30px;" onclick="startGlobalTimer()">Pradėti laiką</button>
@@ -377,6 +379,8 @@ const killMode = () => (status.killMode === 'tag' ? 'tag' : 'bring');
 // Taškai: taikinys paskiriamas CONTRACT_MIN minučių. Pirmas FULL_MIN min. vertė MAX_POINTS,
 // vėliau kas minutę mažėja 1 tašku (bent 1). Pasibaigus kontraktui taikinys pakeičiamas.
 // Jei žudikas tuo metu pats yra priešų taikinys – taškai dauginami iš HUNTED_MULT.
+// Nenuolatiniai kambariai ištrinami, jei nenaudojami ROOM_TTL_DAYS dienų (žr. roomIndex taisyklėse).
+const ROOM_TTL_DAYS = 5;
 const CONTRACT_MIN = 15, FULL_MIN = 5, MAX_POINTS = 10, HUNTED_MULT = 3;
 // Pasibaigus kontraktui, seno taikinio žymę dar LATE_MIN min. galima nuskenuoti (vertė 1 tšk.),
 // kad nebūtų baudžiama, jei jis buvo nukautas, bet žymė dar nešama į bazę.
@@ -512,6 +516,63 @@ function confirmOk() {
     if (st.typeWord && normWord($('cm-input').value) !== normWord(st.typeWord)) return;
     closeConfirm();
     if (st.onOk) st.onOk();
+}
+
+/* ==========================================================================
+   EKRANAS NEUŽGĘSTA (Screen Wake Lock) žaidimo ir NFC susiejimo metu
+   ========================================================================== */
+let wakeLock = null;
+async function keepAwake(on) {
+    if (!('wakeLock' in navigator)) return;
+    try {
+        if (on && !wakeLock && document.visibilityState === 'visible') {
+            wakeLock = await navigator.wakeLock.request('screen');
+            wakeLock.addEventListener('release', () => { wakeLock = null; });
+        } else if (!on && wakeLock) {
+            const w = wakeLock; wakeLock = null; await w.release();
+        }
+    } catch (e) { wakeLock = null; }
+}
+const wantAwake = () => ['game', 'nfc'].includes(phase()) && !!myRole;
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') keepAwake(wantAwake()); });
+
+/* ==========================================================================
+   VIBRACIJA IR GARSAS (komandos telefonui)
+   Naršyklės leidžia garsą/vibraciją tik po pirmo palietimo – todėl „atrakiname“ jį tada.
+   ========================================================================== */
+let audioCtx = null;
+function unlockAudio() {
+    try {
+        if (!audioCtx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) audioCtx = new AC(); }
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    } catch (e) {}
+    keepAwake(wantAwake());
+}
+document.addEventListener('pointerdown', unlockAudio, { passive: true });
+function tone(freq, start, dur, vol) {
+    if (!audioCtx) return;
+    const t0 = audioCtx.currentTime + start;
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'square'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol || 0.25, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0); o.stop(t0 + dur + 0.02);
+}
+const FEEDBACK = {
+    scan:   { vib: 80,                      tones: [[880, 0, 0.12]] },                       // taikinio žymė atpažinta
+    kill:   { vib: [90, 60, 90],            tones: [[880, 0, 0.12], [1320, 0.15, 0.2]] },   // nukovimas patvirtintas
+    bad:    { vib: 450,                     tones: [[220, 0, 0.4]] },                        // klaidinga žymė
+    target: { vib: [160, 90, 160, 90, 160], tones: [[660, 0, 0.14], [990, 0.18, 0.22]] }    // naujas taikinys
+};
+let lastFeedback = 0;
+function feedback(kind) {
+    const f = FEEDBACK[kind];
+    if (!f) return;
+    lastFeedback = Date.now();
+    try { if (navigator.vibrate) navigator.vibrate(f.vib); } catch (e) {}
+    try { f.tones.forEach(t => tone(t[0], t[1], t[2])); } catch (e) {}
 }
 
 /* ==========================================================================
@@ -786,6 +847,7 @@ async function submitPin() {
     try {
         await R('gms/' + myUid).set(key);       // taisyklės priims tik teisingą kodą
         $('pinInput').value = '';
+        touchRoom();
     } catch (e) {
         if (e && /permission/i.test(e.message || e.code || '')) toast('Neteisingas GM kodas.', true);
         else dbError(e);
@@ -1253,6 +1315,7 @@ function gmResetNfcOnly() {
    ========================================================================== */
 async function launchRound() {
     if (!isGM()) return;
+    touchRoom();
     if (players.length < 2 || players.some(p => !p.team) || !hasBothTeams()) {
         return toast('Reikia bent po vieną žaidėją kiekvienoje komandoje.', true);
     }
@@ -1345,8 +1408,26 @@ function revealResults() {
     R('gameStatus/revealed').set(true).catch(dbError);
 }
 
+// Pažymime, kad kambarys naudojamas (tik nenuolatiniams – nuolatiniai neturi roomIndex įrašo).
+function touchRoom() {
+    db.ref('roomIndex/' + ROOM + '/lastUsed').set(firebase.database.ServerValue.TIMESTAMP).catch(() => {});
+}
+// Seni kambariai ištrinami bet kurio prisijungusio telefono (taisyklės leidžia tik senesnius nei 5 d.).
+async function cleanupOldRooms() {
+    try {
+        const cutoff = now() - ROOM_TTL_DAYS * 86400000 - 120000;
+        const snap = await db.ref('roomIndex').orderByChild('lastUsed').endAt(cutoff).limitToFirst(10).once('value');
+        const codes = [];
+        snap.forEach(c => { if (c.key !== ROOM) codes.push(c.key); });
+        for (const code of codes) {
+            try { await db.ref('rooms/' + code).remove(); await db.ref('roomIndex/' + code).remove(); } catch (e) {}
+        }
+    } catch (e) { /* taisyklės dar neatnaujintos ar nėra ryšio – nieko tokio */ }
+}
+
 function startGlobalTimer() {
     if (!isGM()) return;
+    touchRoom();
     R('gameStatus/startTime').set(firebase.database.ServerValue.TIMESTAMP).catch(dbError);
 }
 
@@ -1434,6 +1515,7 @@ function killScan() {
             if (lt) { target = lt; lateHit = true; }
         }
         if (!target) {
+            feedback('bad');
             applyPenalty();
             logMiss();
             return toast(`Klaida: nuskenuota ne jūsų taikinių žymė! Blokuota ${PENALTY_SECONDS}s.`, true, 4000);
@@ -1446,6 +1528,7 @@ function killScan() {
         };
         $('killer-target').innerHTML = `<span style="display:flex; align-items:center; gap:12px;">${avatar(target, 56)}<span>${esc(target.name)}${target.realName ? ` <span class="muted" style="font: 500 1rem 'Barlow', sans-serif;">${esc(target.realName)}</span>` : ''}</span></span>`;
         renderKillerList();
+        feedback('scan');
         $('killer-modal').classList.remove('hidden');
     });
 }
@@ -1514,6 +1597,7 @@ async function confirmKill(hunter, target, pts, triple) {
             t: firebase.database.ServerValue.TIMESTAMP
         });
         toast(`Nukovimas patvirtintas: ${hunter.name}`);   // taškai slapti iki pabaigos
+        feedback('kill');
         checkTeamElimination();
     } catch (e) { dbError(e); }
 }
@@ -1561,10 +1645,22 @@ function renderFeed(containerId, limit) {
     c.innerHTML = items.length ? items.map(feedLine).join('') : '<div class="feed-empty">Kol kas nieko nenutiko.</div>';
 }
 
+// Kai komandai paskiriamas naujas taikinys – vibracija ir garsas (ne iškart po savo nukovimo garso).
+let prevTargetIds = null;
+function noticeNewTargets(targets) {
+    const ids = targets.map(t => t.id);
+    if (prevTargetIds && isRunning() && ids.some(id => !prevTargetIds.includes(id))) {
+        const wait = Math.max(0, 900 - (Date.now() - lastFeedback));
+        setTimeout(() => feedback('target'), wait);
+    }
+    prevTargetIds = ids;
+}
+
 function renderHunter() {
     const el = $('player-area');
     const teamLine = `<div class="team-line"><i class="dot" style="background:${teamColor(myRole)}"></i><span style="color:${teamColor(myRole)}">${teamLabel(myRole)} komanda</span></div>`;
     if (!status.startTime) {
+        prevTargetIds = null;
         el.innerHTML = teamLine + `
             <div class="target-frame">
                 <h2>Žaidimas dar neprasidėjo</h2>
@@ -1573,6 +1669,7 @@ function renderHunter() {
         return;
     }
     const targets = getTeamTargets(myRole);
+    noticeNewTargets(targets);
     let body;
     if (targets.length) {
         const rows = targets.map((t, i) => `
@@ -1614,7 +1711,13 @@ function renderGM() {
             </div></div>`;
     renderGMTargets();
 
-    $('gm-player-list').innerHTML = players.map(p => {
+    // Gyvi viršuje, nukauti apačioje; paieška pagal slapyvardį ar vardą.
+    const q = ($('gmSearch').value || '').trim().toLowerCase();
+    const match = p => !q || p.name.toLowerCase().includes(q) || String(p.realName || '').toLowerCase().includes(q);
+    const shown = players.filter(match).sort((a, b) => (b.isAlive ? 1 : 0) - (a.isAlive ? 1 : 0));
+    const alive = players.filter(p => p.isAlive).length;
+    $('gm-list-sum').innerText = `Gyvi ${alive} · nukauti ${players.length - alive}` + (q ? ` · rasta ${shown.length}` : '');
+    $('gm-player-list').innerHTML = (shown.length ? '' : '<p class="muted">Nieko nerasta.</p>') + shown.map(p => {
         const hunted = ['RAUDONA', 'MELYNA'].some(tm => { return getTeamTargets(tm).some(x => x.id === p.id); });
         return `
         <div class="gm-card ${p.isAlive ? '' : 'dead'}">
@@ -1754,6 +1857,7 @@ function render() {
         }
     }
     applyNfcWaitUI();
+    keepAwake(wantAwake());
 }
 
 /* ==========================================================================
@@ -1815,6 +1919,7 @@ async function init() {
     }
     attachListeners();
     render();
+    setTimeout(cleanupOldRooms, 4000);
 }
 init();
 </script>

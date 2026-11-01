@@ -36,6 +36,9 @@
         .btn-primary { background: var(--ink); border-color: var(--ink); color: #fff; }
         .btn-sm { min-height: 44px; padding: 8px 14px; margin-top: 0; width: auto; flex: 1 1 0; }
         details { margin-top: 14px; }
+        .check { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-weight: 500; cursor: pointer; }
+        .check input { width: 20px; height: 20px; margin: 0; flex: 0 0 auto; }
+        .small { font-size: 0.85rem; }
         details summary { cursor: pointer; font-weight: 600; min-height: 36px; display: flex; align-items: center; }
 
         .code { font: 700 clamp(1.7rem, 8vw, 2.3rem)/1 'Barlow Condensed', sans-serif; letter-spacing: .06em; white-space: nowrap; }
@@ -67,7 +70,9 @@
             <input type="text" id="ccode" maxlength="8" placeholder="Palikite tuščią – sugeneruosime" autocomplete="off" autocapitalize="characters">
             <label for="ckey">GM kodas (6–12 raidžių ar skaičių)</label>
             <input type="text" id="ckey" maxlength="12" placeholder="Palikite tuščią – sugeneruosime" autocomplete="off" autocapitalize="characters">
+            <label class="check"><input type="checkbox" id="keep"> Nuolatinis kambarys (netrinti automatiškai)</label>
         </details>
+        <p class="muted small" style="margin:12px 0 0;">Kambarys ištrinamas automatiškai, jei 5 dienas jame nepradedamas joks raundas. Nuolatinis kambarys netrinamas.</p>
         <button id="create" class="btn btn-primary" onclick="createRoom()">Sukurti žaidimą</button>
     </div>
 
@@ -76,6 +81,7 @@
             <div class="keybox"><div><h3>Žaidimo kodas</h3><div class="code" id="r-code"></div></div><button class="btn btn-sm" style="flex:0 0 auto;" onclick="copyText(document.getElementById('r-code').textContent)">Kopijuoti</button></div>
             <div class="keybox"><div><h3>GM kodas (tik vedėjui)</h3><div class="code" id="r-key"></div></div><button class="btn btn-sm" style="flex:0 0 auto;" onclick="copyText(document.getElementById('r-key').dataset.raw)">Kopijuoti</button></div>
             <div class="warn">Išsaugokite GM kodą dabar. Vėliau jo atkurti negalima.</div>
+            <p class="muted small" id="r-ttl" style="margin:10px 0 0;"></p>
         </div>
         <div class="card" id="r-links"></div>
         <button class="btn" onclick="copyAll()">Kopijuoti visas žaidėjų nuorodas</button>
@@ -111,6 +117,16 @@
     }
 
     let created = null;
+    // Seni kambariai (nenaudoti 5 d.) ištrinami – taisyklės leidžia trinti tik tokius.
+    async function cleanupOldRooms() {
+        try {
+            const off = (await db.ref('.info/serverTimeOffset').once('value')).val() || 0;
+            const cutoff = Date.now() + off - 5 * 86400000 - 120000;
+            const snap = await db.ref('roomIndex').orderByChild('lastUsed').endAt(cutoff).limitToFirst(10).once('value');
+            const codes = []; snap.forEach(c => { codes.push(c.key); });
+            for (const c of codes) { try { await db.ref('rooms/' + c).remove(); await db.ref('roomIndex/' + c).remove(); } catch (e) {} }
+        } catch (e) {}
+    }
     async function createRoom() {
         const btn = $('create'); btn.disabled = true; btn.textContent = 'Kuriama...';
         try {
@@ -128,8 +144,12 @@
             }
             if (!code) throw new Error('Nepavyko sukurti kambario. Bandykite dar kartą.');
             await db.ref('rooms/' + code + '/gms/' + uid).set(key);                          // kūrėjas iškart tampa GM
-            await db.ref('rooms/' + code + '/meta').set({ name: $('evname').value.trim(), createdAt: firebase.database.ServerValue.TIMESTAMP });
-            created = { code, key };
+            const keep = $('keep').checked;
+            await db.ref('rooms/' + code + '/meta').set({ name: $('evname').value.trim(), createdAt: firebase.database.ServerValue.TIMESTAMP, keep: keep });
+            // Laikini kambariai įrašomi į roomIndex – iš ten senesni nei 5 d. ištrinami.
+            if (!keep) { try { await db.ref('roomIndex/' + code).set({ lastUsed: firebase.database.ServerValue.TIMESTAMP }); } catch (e) { console.warn(e); } }
+            created = { code, key, keep };
+            cleanupOldRooms();
             showResult();
         } catch (e) {
             console.error(e);
@@ -148,6 +168,8 @@
     function showResult() {
         $('form').classList.add('hidden'); $('result').classList.remove('hidden');
         $('r-code').textContent = created.code;
+        $('r-ttl').textContent = created.keep ? 'Nuolatinis kambarys – automatiškai netrinamas.'
+            : 'Kambarys bus ištrintas, jei 5 dienas jame nebus pradėtas joks raundas.';
         $('r-key').textContent = created.key.slice(0, 4) + '-' + created.key.slice(4); $('r-key').dataset.raw = created.key;
         const hasQr = typeof QRCode !== 'undefined';
         $('r-links').innerHTML = '<h3>Nuorodos</h3>' + LINKS.map((l, i) => `
