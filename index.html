@@ -49,6 +49,8 @@
         .unpaid-note { font-weight: 700; color: var(--ink); }
         .pill.unpaid { background: var(--surface); color: var(--muted); border: 1px dashed var(--line-strong); }
         .player-card .pc-acts { display: flex; gap: 6px; flex: 0 0 auto; }
+.assign-head { display: flex; align-items: center; margin: 18px 0 4px; font-size: 1rem; color: var(--muted); }
+        .assign-done { margin: 14px 0 0; font-weight: 600; color: var(--green); display: flex; align-items: center; }
         .paid-sum { margin: 10px 0 0; font-size: 0.92rem; color: var(--muted); }
 
         /* Buttons */
@@ -1119,7 +1121,7 @@ function renderAssign() {
             <div class="stat"><span class="lbl">Raudoni</span><b style="color:var(--red)">${red}</b></div>
             <div class="stat"><span class="lbl">Mėlyni</span><b style="color:var(--blue)">${blue}</b></div>
         </div>`;
-    $('assignList').innerHTML = players.map(p => `
+    const card = p => `
         <div class="player-card" style="flex-wrap:wrap;">
             ${avatar(p, 40)}
             <i class="dot" style="background:${teamColor(p.team)}; margin-right:0;"></i>
@@ -1130,7 +1132,17 @@ function renderAssign() {
                 <button class="team-btn ${p.team === 'MELYNA' ? 'active' : ''} t-blue" onclick="setTeam('${p.id}','MELYNA')">Mėlyna</button>
                 <button class="gm-btn gm-danger" style="flex:0 0 auto;" onclick="gmDeletePlayer('${p.id}')">Šalinti</button>
             </div>
-        </div>`).join('');
+        </div>`;
+    // Nepriskirti – viršuje; priskirtieji nukeliami žemyn ir sugrupuojami pagal komandą.
+    const none = players.filter(p => p.team !== 'RAUDONA' && p.team !== 'MELYNA');
+    const reds = players.filter(p => p.team === 'RAUDONA');
+    const blues = players.filter(p => p.team === 'MELYNA');
+    const head = (txt, color) => `<h3 class="assign-head"><i class="dot" style="background:${color}"></i>${txt}</h3>`;
+    $('assignList').innerHTML =
+        (none.length ? head(`Be komandos (${none.length})`, 'var(--line-strong)') + none.map(card).join('')
+                     : `<p class="assign-done"><i class="dot ok"></i>Visi žaidėjai priskirti komandoms.</p>`)
+        + (reds.length ? head(`Raudona komanda (${reds.length})`, 'var(--red)') + reds.map(card).join('') : '')
+        + (blues.length ? head(`Mėlyna komanda (${blues.length})`, 'var(--blue)') + blues.map(card).join('') : '');
 }
 
 function setTeam(id, team) {
