@@ -76,6 +76,9 @@
         .gm-help .gh-sub { font-size: .88rem; color: #D9DCE2; }
         .gm-help button { flex: 0 0 auto; min-height: 48px; padding: 8px 18px; border-radius: 12px; border: none; background: #fff; color: var(--ink); font: 700 1rem 'Barlow', sans-serif; cursor: pointer; }
         @keyframes pulseHelp { 50% { box-shadow: 0 0 0 6px rgba(20,23,28,.18); } }
+        .tgt-left { margin-top: 2px; color: var(--muted); font-size: .95rem; }
+        .tgt-left b { color: var(--ink); font: 700 1.15rem 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; }
+        .tgt-left.soon b { text-decoration: underline; text-underline-offset: 3px; }
         .dchk { display: inline-flex; align-items: center; font-size: .8rem; color: var(--muted); white-space: nowrap; margin-left: 4px; }
         .dchk .dot { width: 8px; height: 8px; margin-right: 4px; }
         .dchk.bad { color: var(--ink); font-weight: 700; }
@@ -854,7 +857,7 @@ setInterval(() => {
     if (isRunning()) {
         ensureTargets();
         if (myRole === 'GM' && isGM() && phase() === 'game') { renderGMTargets(); renderHelpGM(); }
-        else if (myRole !== 'GM' && phase() === 'game') renderHelpTeam();
+        else if (myRole !== 'GM' && phase() === 'game') { renderHelpTeam(); updateTargetTimers(); }
     }
     // Prasidėjus „Medžioklės valandai“ – signalas ir ekrano atnaujinimas (vieną kartą).
     const fin = isFinalPhase();
@@ -1875,6 +1878,15 @@ function hideContract() {
     $('contract').classList.add('hidden');
 }
 
+// Kiek laiko liko medžioti kiekvieną taikinį (kontrakto pabaiga). Atnaujinama kas sekundę vietoje.
+function updateTargetTimers() {
+    document.querySelectorAll('.tgt-left').forEach(e => {
+        const left = contractLeftSec(Number(e.dataset.at) || null);
+        e.querySelector('b').textContent = fmt(left);
+        e.classList.toggle('soon', left <= 120);
+    });
+}
+
 function renderHunter() {
     const el = $('player-area');
     const teamLine = `<div class="team-line"><i class="dot" style="background:${teamColor(myRole)}"></i><span style="color:${teamColor(myRole)}">${teamLabel(myRole)} komanda</span></div>`;
@@ -1901,6 +1913,7 @@ function renderHunter() {
                     ${t.realName ? `<div class="target-real">${esc(t.realName)}</div>` : ''}
                 </div></div>
                 <div class="target-team"><i class="dot" style="background:${teamColor(t.team)}"></i>${teamLabel(t.team)} komanda</div>
+                <div class="tgt-left" data-at="${t.at || ''}">Liko medžioti <b></b></div>
             </div>`).join('');
         const lbl = targets.length > 1 ? 'Jūsų komandos taikiniai – nukaukite bet kurį' : 'Jūsų komandos taikinys';
         body = `
@@ -1917,6 +1930,7 @@ function renderHunter() {
     }
     const deathBtn = isRunning() ? `<button class="action-btn ghost" style="margin-top:12px;" onclick="openDeathModal()">Mane nukovė</button>` : '';
     el.innerHTML = teamLine + finalBanner + `<div class="target-frame">${body}</div>${deathBtn}<div id="help-area"></div>`;
+    updateTargetTimers();
     updateKillBtn();
     renderHelpTeam();
 }
